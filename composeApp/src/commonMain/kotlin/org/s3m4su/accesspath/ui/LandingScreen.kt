@@ -93,7 +93,7 @@ fun LandingScreen(
                 }
             )
         },
-        gesturesEnabled = true
+        gesturesEnabled = false
     ) {
         Box(modifier = Modifier.fillMaxSize()) {
             // Map
