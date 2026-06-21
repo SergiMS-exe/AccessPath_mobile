@@ -22,6 +22,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -33,6 +34,8 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import org.s3m4su.accesspath.data.MockPlaces
 import org.s3m4su.accesspath.data.Place
+import org.s3m4su.accesspath.data.auth.AuthRepository
+import org.s3m4su.accesspath.data.auth.AuthState
 import org.s3m4su.accesspath.location.Location
 import org.s3m4su.accesspath.location.createLocationService
 import org.s3m4su.accesspath.map.MapViewWithMarkers
@@ -72,14 +75,10 @@ fun LandingScreen(
 
     val locationService = remember { createLocationService() }
 
-    // Mock user profile
-    val userProfile = remember {
-        UserProfile(
-            name = "Juan Pérez",
-            badge = "GUÍA LOCAL",
-            contributorLevel = 3,
-            reviewCount = 45
-        )
+    val authState by AuthRepository.state.collectAsState()
+    val userProfile = remember(authState) {
+        val username = (authState as? AuthState.Authenticated)?.user?.username ?: ""
+        UserProfile(name = username)
     }
 
     // Reejecutable desde el boton de recargar del banner: detecta el estado de
@@ -100,7 +99,13 @@ fun LandingScreen(
 
     LaunchedEffect(Unit) {
         places = MockPlaces.getMockPlaces()
-        refreshLocation()
+        // Al volver del detalle selectedPlace ya tiene valor: centrar en el lugar.
+        // En el arranque inicial no hay lugar seleccionado: centrar en el usuario.
+        if (selectedPlace != null) {
+            mapCenter = Location(selectedPlace.latitude, selectedPlace.longitude)
+        } else {
+            refreshLocation()
+        }
     }
 
     ModalNavigationDrawer(
@@ -117,7 +122,7 @@ fun LandingScreen(
                 onDarkModeToggle = onDarkModeToggle,
                 onLogout = {
                     scope.launch { drawerState.close() }
-                    // TODO: Handle logout
+                    AuthRepository.logout()
                 }
             )
         },
@@ -134,7 +139,10 @@ fun LandingScreen(
                     longitude = center.longitude,
                     zoom = zoom,
                     places = visiblePlaces,
-                    onPlaceClick = { onSelectedPlaceChange(it) }
+                    onPlaceClick = { place ->
+                        onSelectedPlaceChange(place)
+                        mapCenter = Location(place.latitude, place.longitude)
+                    }
                 )
             }
 

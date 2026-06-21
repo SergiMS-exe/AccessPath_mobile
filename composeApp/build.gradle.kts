@@ -6,6 +6,7 @@ plugins {
     alias(libs.plugins.androidApplication)
     alias(libs.plugins.composeMultiplatform)
     alias(libs.plugins.composeCompiler)
+    alias(libs.plugins.kotlinxSerialization)
 }
 
 kotlin {
@@ -32,6 +33,10 @@ kotlin {
             implementation(libs.google.maps.compose)
             implementation(libs.play.services.location)
             implementation(libs.play.services.maps)
+            implementation(libs.ktor.client.okhttp)
+        }
+        iosMain.dependencies {
+            implementation(libs.ktor.client.darwin)
         }
         commonMain.dependencies {
             implementation(libs.compose.runtime)
@@ -43,6 +48,13 @@ kotlin {
             implementation(libs.androidx.lifecycle.viewmodelCompose)
             implementation(libs.androidx.lifecycle.runtimeCompose)
             implementation(libs.kotlinx.coroutines.core)
+            implementation(libs.ktor.client.core)
+            implementation(libs.ktor.client.content.negotiation)
+            implementation(libs.ktor.client.serialization.json)
+            implementation(libs.ktor.client.logging)
+            implementation(libs.kotlinx.serialization.json)
+            implementation(libs.multiplatform.settings)
+            implementation(libs.ktor.client.auth)
         }
         commonTest.dependencies {
             implementation(libs.kotlin.test)
