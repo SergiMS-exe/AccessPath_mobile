@@ -1,35 +1,69 @@
-This is a Kotlin Multiplatform project targeting Android, iOS.
+# AccessPath — Mobile
 
-* [/composeApp](./composeApp/src) is for code that will be shared across your Compose Multiplatform applications.
-  It contains several subfolders:
-  - [commonMain](./composeApp/src/commonMain/kotlin) is for code that’s common for all targets.
-  - Other folders are for Kotlin code that will be compiled for only the platform indicated in the folder name.
-    For example, if you want to use Apple’s CoreCrypto for the iOS part of your Kotlin app,
-    the [iosMain](./composeApp/src/iosMain/kotlin) folder would be the right place for such calls.
-    Similarly, if you want to edit the Desktop (JVM) specific part, the [jvmMain](./composeApp/src/jvmMain/kotlin)
-    folder is the appropriate location.
+App movil para la plataforma AccessPath: busca y valora la accesibilidad de lugares publicos.
 
-* [/iosApp](./iosApp/iosApp) contains iOS applications. Even if you’re sharing your UI with Compose Multiplatform,
-  you need this entry point for your iOS app. This is also where you should add SwiftUI code for your project.
+Desarrollada con **Kotlin Multiplatform** y **Compose Multiplatform**. Codigo compartido en Android e iOS.
 
-### Build and Run Android Application
+## Stack
 
-To build and run the development version of the Android app, use the run configuration from the run widget
-in your IDE’s toolbar or build it directly from the terminal:
-- on macOS/Linux
-  ```shell
-  ./gradlew :composeApp:assembleDebug
-  ```
-- on Windows
-  ```shell
-  .\gradlew.bat :composeApp:assembleDebug
-  ```
+| Componente         | Tecnologia                              |
+|--------------------|-----------------------------------------|
+| Lenguaje           | Kotlin 2.1.0                            |
+| UI                 | Compose Multiplatform 1.7.3             |
+| HTTP               | Ktor 3.1.3                              |
+| Serializacion      | kotlinx.serialization 1.7.3             |
+| Persistencia local | multiplatform-settings 1.3.0            |
+| Mapas (Android)    | Google Maps Compose 6.4.0               |
+| Min Android SDK    | 24                                      |
 
-### Build and Run iOS Application
+## Estructura
 
-To build and run the development version of the iOS app, use the run configuration from the run widget
-in your IDE’s toolbar or open the [/iosApp](./iosApp) directory in Xcode and run it from there.
+```
+composeApp/src/
+  commonMain/         # Codigo compartido
+    App.kt            # Navegacion (stack de pantallas)
+    data/
+      api/            # Cliente HTTP y endpoints
+      auth/           # Estado de autenticacion y persistencia
+    ui/
+      auth/           # Pantalla de login y registro
+      components/     # Componentes reutilizables (drawer, mapa, busqueda...)
+      theme/          # AccessPathTheme con colores y modo oscuro
+  androidMain/        # Implementaciones Android (mapa, ubicacion)
+  iosMain/            # Implementaciones iOS
+iosApp/               # Wrapper nativo iOS (SwiftUI)
+```
 
----
+## Configuracion
 
-Learn more about [Kotlin Multiplatform](https://www.jetbrains.com/help/kotlin-multiplatform-dev/get-started.html)…
+### Android
+
+1. Abre el proyecto en Android Studio
+2. Sincroniza Gradle
+3. Configura la clave de Google Maps en `local.properties`:
+   ```
+   MAPS_API_KEY=tu_clave_aqui
+   ```
+4. Ajusta `API_BASE_URL` en `data/api/ApiClient.kt` con la IP del backend
+
+### iOS
+
+1. Abre `iosApp/iosApp.xcodeproj` en Xcode
+2. Configura `TEAM_ID` en `iosApp/Configuration/Config.xcconfig`
+
+## Auth
+
+El flujo de autenticacion es transparente para el usuario:
+
+- Login → guarda `token` (1h) + `refresh_token` (30 dias) en almacenamiento local
+- Al relanzar la app → restaura sesion automaticamente desde almacenamiento
+- Si el token expira → Ktor lo renueva en silencio con el refresh token
+- Solo vuelve al login si han pasado mas de 30 dias sin abrir la app
+
+## Desarrollo
+
+No se necesita compilar el backend para trabajar en la UI: hay datos mock en `data/MockPlaces.kt`.
+
+Para pruebas end-to-end con el backend real ver [AccessPath_backend](../AccessPath_backend/README.md).
+
+Ver `.claude/CLAUDE.md` para convenciones de trabajo y arquitectura detallada.
