@@ -2,7 +2,12 @@ package org.s3m4su.accesspath.ui.components
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
@@ -11,18 +16,32 @@ import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.draggable
 import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Accessible
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.IntOffset
@@ -32,16 +51,23 @@ import org.s3m4su.accesspath.data.AccessibilityLevel
 import org.s3m4su.accesspath.data.AccessibilityScore
 import org.s3m4su.accesspath.data.Place
 import org.s3m4su.accesspath.data.PlaceCategory
+import org.s3m4su.accesspath.ui.landing.PlaceFilter
 import org.s3m4su.accesspath.ui.theme.AccessPathTheme
 import kotlin.math.roundToInt
 
 @Composable
-fun TopSearchBar(
+fun SearchBar(
+    query: String,
+    onQueryChange: (String) -> Unit,
     onMenuClick: () -> Unit,
-    onSearchClick: () -> Unit,
+    filter: PlaceFilter,
+    onCategoriesChange: (Set<PlaceCategory>) -> Unit,
+    onMinAccessibilityChange: (Float) -> Unit,
+    onClearFilters: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val colors = AccessPathTheme.colors
+    var showFilters by remember { mutableStateOf(false) }
 
     Surface(
         modifier = modifier
@@ -52,39 +78,220 @@ fun TopSearchBar(
         color = colors.surface,
         tonalElevation = 2.dp
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 20.dp, vertical = 16.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(
-                imageVector = Icons.Default.Menu,
-                contentDescription = "Menu",
+        Column {
+            Row(
                 modifier = Modifier
-                    .size(24.dp)
-                    .clickable(onClick = onMenuClick),
-                tint = colors.iconTint
-            )
+                    .fillMaxWidth()
+                    .padding(start = 20.dp, end = 12.dp, top = 8.dp, bottom = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Menu,
+                    contentDescription = "Menu",
+                    modifier = Modifier
+                        .size(24.dp)
+                        .clickable(onClick = onMenuClick),
+                    tint = colors.iconTint
+                )
 
-            Spacer(modifier = Modifier.width(16.dp))
+                Spacer(modifier = Modifier.width(16.dp))
 
-            Text(
-                text = "Mapa Accesible",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold,
-                color = colors.textPrimary,
-                modifier = Modifier.weight(1f)
-            )
+                Box(modifier = Modifier.weight(1f)) {
+                    BasicTextField(
+                        value = query,
+                        onValueChange = onQueryChange,
+                        singleLine = true,
+                        textStyle = MaterialTheme.typography.titleMedium.copy(color = colors.textPrimary),
+                        cursorBrush = SolidColor(colors.primary),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    if (query.isEmpty()) {
+                        Text(
+                            text = "Buscar lugares accesibles",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = colors.textTertiary
+                        )
+                    }
+                }
 
-            Icon(
-                imageVector = Icons.Default.Search,
-                contentDescription = "Search",
-                modifier = Modifier
-                    .size(24.dp)
-                    .clickable(onClick = onSearchClick),
-                tint = colors.iconTint
-            )
+                if (query.isNotEmpty()) {
+                    IconButton(onClick = { onQueryChange("") }) {
+                        Icon(
+                            imageVector = Icons.Default.Close,
+                            contentDescription = "Limpiar busqueda",
+                            tint = colors.iconTint
+                        )
+                    }
+                }
+
+                IconButton(onClick = { showFilters = !showFilters }) {
+                    Icon(
+                        imageVector = Icons.Default.FilterAlt,
+                        contentDescription = "Filtros",
+                        tint = if (showFilters || filter.activeCount > 0) colors.primary else colors.iconTint
+                    )
+                }
+            }
+
+            AnimatedVisibility(
+                visible = showFilters,
+                enter = expandVertically() + fadeIn(),
+                exit = shrinkVertically() + fadeOut()
+            ) {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    HorizontalDivider(
+                        modifier = Modifier.padding(horizontal = 16.dp),
+                        color = colors.divider
+                    )
+
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 8.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 20.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "Categoria",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.SemiBold,
+                                color = colors.textPrimary
+                            )
+                            if (filter.activeCount > 0) {
+                                TextButton(onClick = onClearFilters) {
+                                    Text(text = "Limpiar", color = colors.primary)
+                                }
+                            }
+                        }
+
+                        val categoryListState = rememberLazyListState()
+                        val canScrollLeft by remember {
+                            derivedStateOf {
+                                categoryListState.firstVisibleItemIndex > 0 ||
+                                    categoryListState.firstVisibleItemScrollOffset > 0
+                            }
+                        }
+                        val canScrollRight by remember {
+                            derivedStateOf {
+                                val info = categoryListState.layoutInfo
+                                val visible = info.visibleItemsInfo
+                                visible.isNotEmpty() && (
+                                    visible.last().index < info.totalItemsCount - 1 ||
+                                        visible.last().offset + visible.last().size > info.viewportEndOffset
+                                )
+                            }
+                        }
+                        val leftAlpha by animateFloatAsState(
+                            targetValue = if (canScrollLeft) 1f else 0f,
+                            animationSpec = tween(200),
+                            label = "leftFade"
+                        )
+                        val rightAlpha by animateFloatAsState(
+                            targetValue = if (canScrollRight) 1f else 0f,
+                            animationSpec = tween(200),
+                            label = "rightFade"
+                        )
+                        val surfaceColor = colors.surface
+
+                        LazyRow(
+                            state = categoryListState,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .drawWithContent {
+                                    drawContent()
+                                    if (leftAlpha > 0f) {
+                                        drawRect(
+                                            brush = Brush.horizontalGradient(
+                                                colors = listOf(
+                                                    surfaceColor.copy(alpha = leftAlpha),
+                                                    surfaceColor.copy(alpha = 0f)
+                                                ),
+                                                startX = 0f,
+                                                endX = 56.dp.toPx()
+                                            )
+                                        )
+                                    }
+                                    if (rightAlpha > 0f) {
+                                        drawRect(
+                                            brush = Brush.horizontalGradient(
+                                                colors = listOf(
+                                                    surfaceColor.copy(alpha = 0f),
+                                                    surfaceColor.copy(alpha = rightAlpha)
+                                                ),
+                                                startX = size.width - 56.dp.toPx(),
+                                                endX = size.width
+                                            )
+                                        )
+                                    }
+                                },
+                            contentPadding = PaddingValues(horizontal = 20.dp, vertical = 8.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            items(PlaceCategory.entries) { category ->
+                                val selected = category in filter.categories
+                                FilterChip(
+                                    selected = selected,
+                                    onClick = {
+                                        val next = filter.categories.toMutableSet().apply {
+                                            if (selected) remove(category) else add(category)
+                                        }
+                                        onCategoriesChange(next)
+                                    },
+                                    label = { Text(category.getDisplayName()) },
+                                    colors = FilterChipDefaults.filterChipColors(
+                                        selectedContainerColor = colors.primary,
+                                        selectedLabelColor = Color.White
+                                    )
+                                )
+                            }
+                        }
+
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 20.dp, vertical = 4.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "Accesibilidad minima",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.SemiBold,
+                                color = colors.textPrimary
+                            )
+                            Text(
+                                text = if (filter.minAccessibility <= 0f) {
+                                    "Cualquiera"
+                                } else {
+                                    formatFilterRating(filter.minAccessibility)
+                                },
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = colors.primary
+                            )
+                        }
+
+                        Slider(
+                            value = filter.minAccessibility,
+                            onValueChange = onMinAccessibilityChange,
+                            valueRange = 0f..5f,
+                            steps = 9,
+                            colors = SliderDefaults.colors(
+                                thumbColor = colors.primary,
+                                activeTrackColor = colors.primary
+                            ),
+                            modifier = Modifier
+                                .padding(horizontal = 20.dp)
+                                .padding(bottom = 8.dp)
+                        )
+                    }
+                }
+            }
         }
     }
 }
@@ -156,7 +363,6 @@ fun PlaceBottomSheet(
                     .fillMaxWidth()
                     .padding(20.dp)
             ) {
-                // Drag handle
                 Box(
                     modifier = Modifier
                         .width(40.dp)
@@ -168,7 +374,6 @@ fun PlaceBottomSheet(
 
                 Spacer(modifier = Modifier.height(16.dp))
 
-                // Place name and image
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -182,11 +387,9 @@ fun PlaceBottomSheet(
                             color = colors.textPrimary
                         )
                         Spacer(modifier = Modifier.height(4.dp))
-                        // Categoria del lugar
                         CategoryChip(category = place.category.getDisplayName())
                     }
 
-                    // Category icon
                     Box(
                         modifier = Modifier
                             .size(56.dp)
@@ -205,7 +408,6 @@ fun PlaceBottomSheet(
 
                 Spacer(modifier = Modifier.height(8.dp))
 
-                // Address
                 Text(
                     text = place.address,
                     style = MaterialTheme.typography.bodyMedium,
@@ -214,7 +416,6 @@ fun PlaceBottomSheet(
 
                 Spacer(modifier = Modifier.height(16.dp))
 
-                // Accessibility and rating
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -237,7 +438,6 @@ fun PlaceBottomSheet(
                         }
                     }
 
-                    // Rating
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(4.dp)
@@ -259,7 +459,6 @@ fun PlaceBottomSheet(
 
                 Spacer(modifier = Modifier.height(16.dp))
 
-                // Action buttons
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -281,7 +480,7 @@ fun PlaceBottomSheet(
                                 fontWeight = FontWeight.SemiBold
                             )
                             Icon(
-                                imageVector = Icons.Default.ArrowForward,
+                                imageVector = Icons.AutoMirrored.Filled.ArrowForward,
                                 contentDescription = null,
                                 modifier = Modifier.size(18.dp)
                             )
@@ -446,7 +645,7 @@ fun AccessibilityChip(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Icon(
-                imageVector = Icons.Default.Accessible,
+                imageVector = Icons.AutoMirrored.Filled.Accessible,
                 contentDescription = null,
                 tint = color,
                 modifier = Modifier.size(16.dp)
@@ -521,7 +720,6 @@ fun MapControlButtons(
     }
 }
 
-// Extension para obtener color según nivel de accesibilidad
 @Composable
 fun AccessibilityLevel.getColor() = when (this) {
     AccessibilityLevel.VERY_EASY -> AccessPathTheme.colors.accessVeryEasy
@@ -530,7 +728,6 @@ fun AccessibilityLevel.getColor() = when (this) {
     AccessibilityLevel.DIFFICULT -> AccessPathTheme.colors.accessDifficult
 }
 
-// Extension para formatear scores
 private fun Double.formatScore(): String {
     val rounded = kotlin.math.round(this * 10) / 10.0
     val str = rounded.toString()
@@ -542,7 +739,13 @@ private fun Double.formatScore(): String {
     }
 }
 
-// Extension para obtener el icono de cada categoría
+private fun formatFilterRating(value: Float): String {
+    val rounded = (value * 10).roundToInt() / 10.0
+    val whole = rounded.toInt()
+    val decimal = ((rounded - whole) * 10).roundToInt()
+    return "$whole.$decimal"
+}
+
 fun PlaceCategory.getIcon(): ImageVector = when (this) {
     PlaceCategory.RESTAURANT -> Icons.Default.Restaurant
     PlaceCategory.CAFE -> Icons.Default.LocalCafe
