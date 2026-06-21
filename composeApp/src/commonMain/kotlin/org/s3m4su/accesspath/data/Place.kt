@@ -134,6 +134,18 @@ enum class AccessibilityLevel {
     }
 }
 
+enum class AccessibilityDimension {
+    PHYSICAL,
+    SENSORY,
+    COGNITIVE;
+
+    fun getDisplayName(): String = when (this) {
+        PHYSICAL -> "Fisica"
+        SENSORY -> "Sensorial"
+        COGNITIVE -> "Cognitiva"
+    }
+}
+
 enum class AccessibilityFeature {
     // Físico
     WHEELCHAIR_ACCESS,
@@ -155,7 +167,38 @@ enum class AccessibilityFeature {
     EASY_READING,
     PICTOGRAMS,
     QUIET_SPACE,
-    CLEAR_SIGNAGE
+    CLEAR_SIGNAGE;
+
+    val dimension: AccessibilityDimension
+        get() = when (this) {
+            WHEELCHAIR_ACCESS, RAMP, ELEVATOR, WIDE_DOORS,
+            ACCESSIBLE_BATHROOM, PARKING, HANDRAILS -> AccessibilityDimension.PHYSICAL
+
+            BRAILLE_SIGNAGE, HEARING_LOOP, SIGN_LANGUAGE,
+            TACTILE_PAVING, AUDIO_GUIDES -> AccessibilityDimension.SENSORY
+
+            EASY_READING, PICTOGRAMS, QUIET_SPACE,
+            CLEAR_SIGNAGE -> AccessibilityDimension.COGNITIVE
+        }
+
+    fun getDisplayName(): String = when (this) {
+        WHEELCHAIR_ACCESS -> "Acceso silla de ruedas"
+        RAMP -> "Rampa de acceso"
+        ELEVATOR -> "Ascensor"
+        WIDE_DOORS -> "Puertas anchas"
+        ACCESSIBLE_BATHROOM -> "Baño adaptado"
+        PARKING -> "Aparcamiento adaptado"
+        HANDRAILS -> "Pasamanos"
+        BRAILLE_SIGNAGE -> "Señalización en Braille"
+        HEARING_LOOP -> "Bucle magnético"
+        SIGN_LANGUAGE -> "Lengua de signos"
+        TACTILE_PAVING -> "Pavimento táctil"
+        AUDIO_GUIDES -> "Audioguías"
+        EASY_READING -> "Lectura fácil"
+        PICTOGRAMS -> "Pictogramas"
+        QUIET_SPACE -> "Espacio tranquilo"
+        CLEAR_SIGNAGE -> "Señalización clara"
+    }
 }
 
 object MockPlaces {

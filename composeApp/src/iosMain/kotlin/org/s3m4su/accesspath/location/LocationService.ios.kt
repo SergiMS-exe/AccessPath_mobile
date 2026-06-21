@@ -22,6 +22,10 @@ actual class LocationService {
                status == kCLAuthorizationStatusAuthorizedAlways
     }
 
+    actual fun isLocationEnabled(): Boolean {
+        return CLLocationManager.locationServicesEnabled()
+    }
+
     actual suspend fun requestLocationPermission(): Boolean {
         if (hasLocationPermission()) {
             return true
