@@ -9,26 +9,37 @@ import org.s3m4su.accesspath.data.AccessibilityLevel
 import org.s3m4su.accesspath.data.AccessibilityScore
 import org.s3m4su.accesspath.data.Place
 import org.s3m4su.accesspath.data.PlaceCategory
+import org.s3m4su.accesspath.ui.landing.PlaceFilter
 import org.s3m4su.accesspath.ui.theme.AccessPathTheme
 
 @Preview(showBackground = true, name = "Light")
 @Composable
-fun TopSearchBarLightPreview() {
+fun SearchAndFilterBarLightPreview() {
     AccessPathTheme(darkTheme = false) {
-        TopSearchBar(
+        SearchBar(
+            query = "",
+            onQueryChange = {},
             onMenuClick = {},
-            onSearchClick = {}
+            filter = PlaceFilter(),
+            onCategoriesChange = {},
+            onMinAccessibilityChange = {},
+            onClearFilters = {}
         )
     }
 }
 
 @Preview(showBackground = true, name = "Dark", backgroundColor = 0xFF121212)
 @Composable
-fun TopSearchBarDarkPreview() {
+fun SearchAndFilterBarDarkPreview() {
     AccessPathTheme(darkTheme = true) {
-        TopSearchBar(
+        SearchBar(
+            query = "Museo",
+            onQueryChange = {},
             onMenuClick = {},
-            onSearchClick = {}
+            filter = PlaceFilter(minAccessibility = 3f),
+            onCategoriesChange = {},
+            onMinAccessibilityChange = {},
+            onClearFilters = {}
         )
     }
 }
