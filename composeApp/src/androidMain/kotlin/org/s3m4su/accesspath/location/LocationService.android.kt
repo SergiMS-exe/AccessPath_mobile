@@ -4,7 +4,9 @@ import android.Manifest
 import android.annotation.SuppressLint
 import android.content.Context
 import android.content.pm.PackageManager
+import android.location.LocationManager
 import androidx.core.content.ContextCompat
+import androidx.core.location.LocationManagerCompat
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
 import com.google.android.gms.tasks.CancellationTokenSource
@@ -29,6 +31,12 @@ actual class LocationService(private val context: Context) {
         // Permission request must be handled at the UI level
         // This is just a check, actual request is done via rememberLauncherForActivityResult
         return hasLocationPermission()
+    }
+
+    actual fun isLocationEnabled(): Boolean {
+        val lm = context.getSystemService(Context.LOCATION_SERVICE) as? LocationManager
+            ?: return false
+        return LocationManagerCompat.isLocationEnabled(lm)
     }
 
     @SuppressLint("MissingPermission")
