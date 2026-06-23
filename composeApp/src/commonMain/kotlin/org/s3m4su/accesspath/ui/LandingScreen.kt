@@ -34,8 +34,10 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import org.s3m4su.accesspath.data.MockPlaces
 import org.s3m4su.accesspath.data.Place
+import org.s3m4su.accesspath.data.PlaceCategory
 import org.s3m4su.accesspath.data.auth.AuthRepository
 import org.s3m4su.accesspath.data.auth.AuthState
+import org.s3m4su.accesspath.data.api.PlaceDto
 import org.s3m4su.accesspath.location.Location
 import org.s3m4su.accesspath.location.createLocationService
 import org.s3m4su.accesspath.map.MapViewWithMarkers
@@ -160,7 +162,28 @@ fun LandingScreen(
                     filter = filter,
                     onCategoriesChange = { filter = filter.copy(categories = it) },
                     onMinAccessibilityChange = { filter = filter.copy(minAccessibility = it) },
-                    onClearFilters = { filter = filter.copy(categories = emptySet(), minAccessibility = 0f) }
+                    onClearFilters = { filter = filter.copy(categories = emptySet(), minAccessibility = 0f) },
+                    places = places,
+                    onPlaceSelected = { place ->
+                        onSelectedPlaceChange(place)
+                        mapCenter = Location(place.latitude, place.longitude)
+                        filter = filter.copy(query = "")
+                    },
+                    onPlaceAdded = { dto ->
+                        val newPlace = Place(
+                            id = dto.id.toString(),
+                            name = dto.name,
+                            address = dto.address ?: "",
+                            latitude = dto.latitude,
+                            longitude = dto.longitude,
+                            rating = 0f,
+                            category = PlaceCategory.OTHER
+                        )
+                        places = places + newPlace
+                        onSelectedPlaceChange(newPlace)
+                        mapCenter = Location(dto.latitude, dto.longitude)
+                        filter = filter.copy(query = "")
+                    }
                 )
 
                 // Aviso cuando la ubicacion del dispositivo esta apagada
@@ -240,6 +263,7 @@ fun LandingScreen(
                     )
                 }
             }
+
         }
     }
 }

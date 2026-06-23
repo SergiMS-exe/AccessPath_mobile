@@ -15,7 +15,9 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.draggable
 import androidx.compose.foundation.gestures.rememberDraggableState
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -24,10 +26,12 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Accessible
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -39,22 +43,31 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.s3m4su.accesspath.data.AccessibilityLevel
 import org.s3m4su.accesspath.data.AccessibilityScore
 import org.s3m4su.accesspath.data.Place
 import org.s3m4su.accesspath.data.PlaceCategory
+import org.s3m4su.accesspath.data.api.AutocompleteItemDto
+import org.s3m4su.accesspath.data.api.PlaceApi
+import org.s3m4su.accesspath.data.api.PlaceDto
 import org.s3m4su.accesspath.ui.landing.PlaceFilter
 import org.s3m4su.accesspath.ui.theme.AccessPathTheme
 import kotlin.math.roundToInt
+import kotlin.uuid.ExperimentalUuidApi
+import kotlin.uuid.Uuid
 
+@OptIn(ExperimentalUuidApi::class)
 @Composable
 fun SearchBar(
     query: String,
@@ -64,35 +77,97 @@ fun SearchBar(
     onCategoriesChange: (Set<PlaceCategory>) -> Unit,
     onMinAccessibilityChange: (Float) -> Unit,
     onClearFilters: () -> Unit,
+    places: List<Place>,
+    onPlaceSelected: (Place) -> Unit,
+    onPlaceAdded: (PlaceDto) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val colors = AccessPathTheme.colors
+    val focusManager = LocalFocusManager.current
+    val scope = rememberCoroutineScope()
+
     var showFilters by remember { mutableStateOf(false) }
+    var isActive by remember { mutableStateOf(false) }
+    var googleMode by remember { mutableStateOf(false) }
+    var googleSuggestions by remember { mutableStateOf<List<AutocompleteItemDto>>(emptyList()) }
+    var isGoogleSearching by remember { mutableStateOf(false) }
+    var isImporting by remember { mutableStateOf(false) }
+    var googleError by remember { mutableStateOf<String?>(null) }
+    var sessionToken by remember { mutableStateOf(Uuid.random().toString()) }
+
+    val showDropdown = isActive && query.isNotEmpty()
+
+    val filteredPlaces = remember(places, query) {
+        if (query.isBlank()) emptyList()
+        else places.filter {
+            it.name.contains(query, ignoreCase = true) ||
+            it.address.contains(query, ignoreCase = true)
+        }.take(5)
+    }
+
+    LaunchedEffect(query, googleMode) {
+        if (!googleMode || query.length < 3) {
+            googleSuggestions = emptyList()
+            return@LaunchedEffect
+        }
+        delay(300)
+        isGoogleSearching = true
+        googleError = null
+        PlaceApi.search(query, sessionToken)
+            .onSuccess { googleSuggestions = it }
+            .onFailure { googleError = "Error al buscar. Intenta de nuevo." }
+        isGoogleSearching = false
+    }
+
+    fun dismiss() {
+        focusManager.clearFocus()
+        isActive = false
+        googleMode = false
+        googleSuggestions = emptyList()
+        googleError = null
+    }
+
+    val shape = if (showDropdown) RoundedCornerShape(16.dp) else RoundedCornerShape(28.dp)
 
     Surface(
         modifier = modifier
             .fillMaxWidth()
             .padding(16.dp)
-            .shadow(8.dp, RoundedCornerShape(28.dp)),
-        shape = RoundedCornerShape(28.dp),
+            .shadow(8.dp, shape),
+        shape = shape,
         color = colors.surface,
         tonalElevation = 2.dp
     ) {
         Column {
+            // --- Fila de búsqueda ---
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(start = 20.dp, end = 12.dp, top = 8.dp, bottom = 8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(
-                    imageVector = Icons.Default.Menu,
-                    contentDescription = "Menu",
-                    modifier = Modifier
-                        .size(24.dp)
-                        .clickable(onClick = onMenuClick),
-                    tint = colors.iconTint
-                )
+                if (googleMode) {
+                    IconButton(onClick = {
+                        googleMode = false
+                        googleSuggestions = emptyList()
+                        googleError = null
+                    }) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Volver",
+                            tint = colors.iconTint
+                        )
+                    }
+                } else {
+                    Icon(
+                        imageVector = Icons.Default.Menu,
+                        contentDescription = "Menu",
+                        modifier = Modifier
+                            .size(24.dp)
+                            .clickable(onClick = onMenuClick),
+                        tint = colors.iconTint
+                    )
+                }
 
                 Spacer(modifier = Modifier.width(16.dp))
 
@@ -103,7 +178,20 @@ fun SearchBar(
                         singleLine = true,
                         textStyle = MaterialTheme.typography.titleMedium.copy(color = colors.textPrimary),
                         cursorBrush = SolidColor(colors.primary),
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .onFocusChanged { state ->
+                                if (state.isFocused) {
+                                    isActive = true
+                                } else {
+                                    scope.launch {
+                                        delay(100)
+                                        isActive = false
+                                        googleMode = false
+                                        googleSuggestions = emptyList()
+                                    }
+                                }
+                            }
                     )
                     if (query.isEmpty()) {
                         Text(
@@ -115,26 +203,175 @@ fun SearchBar(
                 }
 
                 if (query.isNotEmpty()) {
-                    IconButton(onClick = { onQueryChange("") }) {
-                        Icon(
-                            imageVector = Icons.Default.Close,
-                            contentDescription = "Limpiar busqueda",
-                            tint = colors.iconTint
-                        )
+                    IconButton(onClick = {
+                        onQueryChange("")
+                        dismiss()
+                    }) {
+                        Icon(Icons.Default.Close, contentDescription = "Limpiar", tint = colors.iconTint)
                     }
                 }
 
-                IconButton(onClick = { showFilters = !showFilters }) {
-                    Icon(
-                        imageVector = Icons.Default.FilterAlt,
-                        contentDescription = "Filtros",
-                        tint = if (showFilters || filter.activeCount > 0) colors.primary else colors.iconTint
-                    )
+                if (!googleMode) {
+                    IconButton(onClick = { showFilters = !showFilters }) {
+                        Icon(
+                            imageVector = Icons.Default.FilterAlt,
+                            contentDescription = "Filtros",
+                            tint = if (showFilters || filter.activeCount > 0) colors.primary else colors.iconTint
+                        )
+                    }
                 }
             }
 
+            // --- Dropdown de resultados ---
             AnimatedVisibility(
-                visible = showFilters,
+                visible = showDropdown,
+                enter = expandVertically() + fadeIn(),
+                exit = shrinkVertically() + fadeOut()
+            ) {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    HorizontalDivider(color = colors.divider)
+
+                    if (googleMode) {
+                        when {
+                            isImporting -> {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 20.dp, vertical = 14.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(18.dp),
+                                        color = colors.primary,
+                                        strokeWidth = 2.dp
+                                    )
+                                    Text(
+                                        text = "Añadiendo lugar...",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = colors.textSecondary
+                                    )
+                                }
+                            }
+                            isGoogleSearching -> {
+                                Box(
+                                    modifier = Modifier.fillMaxWidth().padding(vertical = 14.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(18.dp),
+                                        color = colors.primary,
+                                        strokeWidth = 2.dp
+                                    )
+                                }
+                            }
+                            googleError != null -> {
+                                Text(
+                                    text = googleError!!,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.error,
+                                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp)
+                                )
+                            }
+                            googleSuggestions.isNotEmpty() -> {
+                                LazyColumn(modifier = Modifier.heightIn(max = 280.dp)) {
+                                    items(googleSuggestions) { item ->
+                                        GoogleSuggestionRow(
+                                            item = item,
+                                            enabled = !isImporting,
+                                            onClick = {
+                                                scope.launch {
+                                                    isImporting = true
+                                                    googleError = null
+                                                    PlaceApi.importFromGoogle(item.placeId, sessionToken)
+                                                        .onSuccess { dto ->
+                                                            sessionToken = Uuid.random().toString()
+                                                            onPlaceAdded(dto)
+                                                            dismiss()
+                                                        }
+                                                        .onFailure {
+                                                            googleError = if (it.message?.contains("429") == true) {
+                                                                "Limite mensual de busquedas alcanzado"
+                                                            } else {
+                                                                "Error al añadir el lugar"
+                                                            }
+                                                        }
+                                                    isImporting = false
+                                                }
+                                            }
+                                        )
+                                        HorizontalDivider(
+                                            modifier = Modifier.padding(horizontal = 20.dp),
+                                            color = colors.divider
+                                        )
+                                    }
+                                }
+                            }
+                            query.length >= 3 -> {
+                                Text(
+                                    text = "No se encontraron resultados en Google Maps",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = colors.textTertiary,
+                                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp)
+                                )
+                            }
+                        }
+                    } else {
+                        // Resultados de AccessPath
+                        if (filteredPlaces.isNotEmpty()) {
+                            LazyColumn(modifier = Modifier.heightIn(max = 240.dp)) {
+                                items(filteredPlaces) { place ->
+                                    AccessPathPlaceRow(place = place) {
+                                        dismiss()
+                                        onPlaceSelected(place)
+                                    }
+                                    HorizontalDivider(
+                                        modifier = Modifier.padding(horizontal = 20.dp),
+                                        color = colors.divider
+                                    )
+                                }
+                            }
+                        }
+
+                        // Fila de Google Maps al fondo
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable(
+                                    interactionSource = remember { MutableInteractionSource() },
+                                    indication = ripple()
+                                ) { googleMode = true }
+                                .padding(horizontal = 20.dp, vertical = 13.dp),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Search,
+                                contentDescription = null,
+                                tint = colors.primary,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Text(
+                                text = "Buscar \"$query\" en Google Maps",
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.Medium,
+                                color = colors.primary,
+                                modifier = Modifier.weight(1f)
+                            )
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                                contentDescription = null,
+                                tint = colors.primary,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                    }
+                }
+            }
+
+            // --- Panel de filtros (oculto mientras el dropdown está abierto) ---
+            AnimatedVisibility(
+                visible = showFilters && !showDropdown,
                 enter = expandVertically() + fadeIn(),
                 exit = shrinkVertically() + fadeOut()
             ) {
@@ -265,11 +502,8 @@ fun SearchBar(
                                 color = colors.textPrimary
                             )
                             Text(
-                                text = if (filter.minAccessibility <= 0f) {
-                                    "Cualquiera"
-                                } else {
-                                    formatFilterRating(filter.minAccessibility)
-                                },
+                                text = if (filter.minAccessibility <= 0f) "Cualquiera"
+                                       else formatFilterRating(filter.minAccessibility),
                                 style = MaterialTheme.typography.bodyMedium,
                                 fontWeight = FontWeight.SemiBold,
                                 color = colors.primary
@@ -716,6 +950,78 @@ fun MapControlButtons(
                     )
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun AccessPathPlaceRow(place: Place, onClick: () -> Unit) {
+    val colors = AccessPathTheme.colors
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(horizontal = 20.dp, vertical = 12.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(
+            imageVector = place.category.getIcon(),
+            contentDescription = null,
+            tint = colors.primary,
+            modifier = Modifier.size(20.dp)
+        )
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = place.name,
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.Medium,
+                color = colors.textPrimary
+            )
+            if (place.address.isNotEmpty()) {
+                Text(
+                    text = place.address,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = colors.textSecondary
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun GoogleSuggestionRow(
+    item: AutocompleteItemDto,
+    enabled: Boolean,
+    onClick: () -> Unit
+) {
+    val colors = AccessPathTheme.colors
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(enabled = enabled, onClick = onClick)
+            .padding(horizontal = 20.dp, vertical = 12.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(
+            imageVector = Icons.Default.Place,
+            contentDescription = null,
+            tint = colors.textTertiary,
+            modifier = Modifier.size(20.dp)
+        )
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = item.mainText,
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.Medium,
+                color = colors.textPrimary
+            )
+            Text(
+                text = item.secondaryText,
+                style = MaterialTheme.typography.bodySmall,
+                color = colors.textSecondary
+            )
         }
     }
 }
