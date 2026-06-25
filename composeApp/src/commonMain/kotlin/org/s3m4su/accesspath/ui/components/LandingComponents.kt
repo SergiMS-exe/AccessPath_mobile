@@ -80,6 +80,7 @@ fun SearchBar(
     places: List<Place>,
     onPlaceSelected: (Place) -> Unit,
     onPlaceAdded: (PlaceDto) -> Unit,
+    onActiveChange: (Boolean) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val colors = AccessPathTheme.colors
@@ -183,10 +184,12 @@ fun SearchBar(
                             .onFocusChanged { state ->
                                 if (state.isFocused) {
                                     isActive = true
+                                    onActiveChange(true)
                                 } else {
                                     scope.launch {
                                         delay(100)
                                         isActive = false
+                                        onActiveChange(false)
                                         googleMode = false
                                         googleSuggestions = emptyList()
                                     }
