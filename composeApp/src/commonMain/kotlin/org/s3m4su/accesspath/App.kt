@@ -31,7 +31,13 @@ fun App(
     var isDarkMode by remember { mutableStateOf(systemDarkTheme) }
 
     // Stack de navegacion: el ultimo elemento es la pantalla activa.
-    var stack by remember { mutableStateOf(listOf<Screen>(Screen.Auth)) }
+    // Se inicializa segun el estado de auth ya restaurado desde Settings,
+    // evitando pedir login innecesariamente al volver a la app.
+    var stack by remember {
+        val initial = if (AuthRepository.state.value is AuthState.Authenticated)
+            listOf(Screen.Landing) else listOf(Screen.Auth)
+        mutableStateOf(initial)
+    }
 
     // Estado que debe sobrevivir el viaje Detail -> Landing (back).
     var selectedPlace by remember { mutableStateOf<Place?>(null) }

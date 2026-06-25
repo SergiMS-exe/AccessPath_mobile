@@ -6,6 +6,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.interop.UIKitView
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.CValue
+import kotlinx.cinterop.useContents
 import platform.CoreLocation.CLLocationCoordinate2D
 import platform.CoreLocation.CLLocationCoordinate2DMake
 import platform.MapKit.*
@@ -22,7 +23,8 @@ actual fun MapViewWithMarkers(
     longitude: Double,
     zoom: Float,
     places: List<Place>,
-    onPlaceClick: (Place) -> Unit
+    onPlaceClick: (Place) -> Unit,
+    onCameraIdle: ((MapBounds) -> Unit)?
 ) {
     val coordinate = remember(latitude, longitude) {
         CLLocationCoordinate2DMake(latitude, longitude)
@@ -59,6 +61,23 @@ actual fun MapViewWithMarkers(
                 
                 // Set up delegate to handle marker taps
                 val mapDelegate = object : NSObject(), MKMapViewDelegateProtocol {
+                    // Cuando el usuario deja de mover el mapa, reporta la region visible.
+                    override fun mapView(
+                        mapView: MKMapView,
+                        regionDidChangeAnimated: Boolean
+                    ) {
+                        mapView.region.useContents {
+                            onCameraIdle?.invoke(
+                                MapBounds(
+                                    minLat = center.latitude - span.latitudeDelta / 2.0,
+                                    maxLat = center.latitude + span.latitudeDelta / 2.0,
+                                    minLng = center.longitude - span.longitudeDelta / 2.0,
+                                    maxLng = center.longitude + span.longitudeDelta / 2.0
+                                )
+                            )
+                        }
+                    }
+
                     override fun mapView(
                         mapView: MKMapView,
                         didSelectAnnotation: MKAnnotationProtocol
@@ -138,6 +157,7 @@ actual fun MapView(
         longitude = longitude,
         zoom = zoom,
         places = emptyList(),
-        onPlaceClick = {}
+        onPlaceClick = {},
+        onCameraIdle = null
     )
 }

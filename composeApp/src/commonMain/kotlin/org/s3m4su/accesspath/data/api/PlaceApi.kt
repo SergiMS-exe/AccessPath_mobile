@@ -22,6 +22,21 @@ object PlaceApi {
         }.body<ApiResponse<List<AutocompleteItemDto>>>().data ?: emptyList()
     }
 
+    // Lugares publicados (con al menos una valoracion) dentro de la region visible del mapa.
+    suspend fun mapPlaces(
+        minLat: Double,
+        maxLat: Double,
+        minLng: Double,
+        maxLng: Double,
+    ): Result<List<PlaceDto>> = runCatching {
+        httpClient.get("$API_BASE_URL/api/v1/places/map") {
+            parameter("min_lat", minLat)
+            parameter("max_lat", maxLat)
+            parameter("min_lng", minLng)
+            parameter("max_lng", maxLng)
+        }.body<ApiResponse<List<PlaceDto>>>().data ?: emptyList()
+    }
+
     suspend fun importFromGoogle(googlePlaceId: String, sessionToken: String): Result<PlaceDto> = runCatching {
         httpClient.post("$API_BASE_URL/api/v1/places/from-google") {
             setBody(ImportFromGoogleBody(googlePlaceId, sessionToken))

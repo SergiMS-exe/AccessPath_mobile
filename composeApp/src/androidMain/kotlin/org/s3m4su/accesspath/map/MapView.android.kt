@@ -26,7 +26,8 @@ actual fun MapViewWithMarkers(
     longitude: Double,
     zoom: Float,
     places: List<Place>,
-    onPlaceClick: (Place) -> Unit
+    onPlaceClick: (Place) -> Unit,
+    onCameraIdle: ((MapBounds) -> Unit)?
 ) {
     val position = LatLng(latitude, longitude)
     val cameraPositionState = rememberCameraPositionState {
@@ -37,6 +38,22 @@ actual fun MapViewWithMarkers(
         cameraPositionState.animate(
             CameraUpdateFactory.newLatLngZoom(LatLng(latitude, longitude), zoom)
         )
+    }
+
+    // Cuando la camara se detiene, reporta la region visible para recargar lugares.
+    LaunchedEffect(cameraPositionState.isMoving) {
+        if (!cameraPositionState.isMoving) {
+            cameraPositionState.projection?.visibleRegion?.latLngBounds?.let { b ->
+                onCameraIdle?.invoke(
+                    MapBounds(
+                        minLat = b.southwest.latitude,
+                        maxLat = b.northeast.latitude,
+                        minLng = b.southwest.longitude,
+                        maxLng = b.northeast.longitude
+                    )
+                )
+            }
+        }
     }
 
     GoogleMap(
@@ -92,6 +109,7 @@ actual fun MapView(
         longitude = longitude,
         zoom = zoom,
         places = emptyList(),
-        onPlaceClick = {}
+        onPlaceClick = {},
+        onCameraIdle = null
     )
 }
