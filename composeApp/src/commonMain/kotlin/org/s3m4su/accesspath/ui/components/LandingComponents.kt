@@ -54,10 +54,9 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import org.s3m4su.accesspath.data.AccessibilityLevel
-import org.s3m4su.accesspath.data.AccessibilityScore
 import org.s3m4su.accesspath.data.Place
 import org.s3m4su.accesspath.data.PlaceCategory
+import org.s3m4su.accesspath.data.accessibility.AccessibilityState
 import org.s3m4su.accesspath.data.api.AutocompleteItemDto
 import org.s3m4su.accesspath.data.api.PlaceApi
 import org.s3m4su.accesspath.data.api.PlaceDto
@@ -75,7 +74,7 @@ fun SearchBar(
     onMenuClick: () -> Unit,
     filter: PlaceFilter,
     onCategoriesChange: (Set<PlaceCategory>) -> Unit,
-    onMinAccessibilityChange: (Float) -> Unit,
+    onStatesChange: (Set<AccessibilityState>) -> Unit,
     onClearFilters: () -> Unit,
     places: List<Place>,
     onPlaceSelected: (Place) -> Unit,
@@ -293,10 +292,13 @@ fun SearchBar(
                                                             dismiss()
                                                         }
                                                         .onFailure {
-                                                            googleError = if (it.message?.contains("429") == true) {
-                                                                "Limite mensual de busquedas alcanzado"
-                                                            } else {
-                                                                "Error al añadir el lugar"
+                                                            googleError = when {
+                                                                it.message?.contains("429") == true ->
+                                                                    "Limite mensual de busquedas alcanzado"
+                                                                // Mensaje del backend (p.ej. sitio cerrado permanentemente).
+                                                                !it.message.isNullOrBlank() && it is IllegalStateException ->
+                                                                    it.message
+                                                                else -> "Error al añadir el lugar"
                                                             }
                                                         }
                                                     isImporting = false
@@ -499,33 +501,44 @@ fun SearchBar(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
-                                text = "Accesibilidad minima",
+                                text = "Estado de accesibilidad",
                                 style = MaterialTheme.typography.titleSmall,
                                 fontWeight = FontWeight.SemiBold,
                                 color = colors.textPrimary
                             )
                             Text(
-                                text = if (filter.minAccessibility <= 0f) "Cualquiera"
-                                       else formatFilterRating(filter.minAccessibility),
+                                text = if (filter.states.isEmpty()) "Cualquiera"
+                                       else "${filter.states.size} elegido${if (filter.states.size == 1) "" else "s"}",
                                 style = MaterialTheme.typography.bodyMedium,
                                 fontWeight = FontWeight.SemiBold,
                                 color = colors.primary
                             )
                         }
 
-                        Slider(
-                            value = filter.minAccessibility,
-                            onValueChange = onMinAccessibilityChange,
-                            valueRange = 0f..5f,
-                            steps = 9,
-                            colors = SliderDefaults.colors(
-                                thumbColor = colors.primary,
-                                activeTrackColor = colors.primary
-                            ),
-                            modifier = Modifier
-                                .padding(horizontal = 20.dp)
-                                .padding(bottom = 8.dp)
-                        )
+                        // Chips del semaforo: etiqueta de texto + color por estado
+                        // (nunca solo color). Multi-seleccion; vacio = cualquiera.
+                        LazyRow(
+                            contentPadding = PaddingValues(horizontal = 20.dp, vertical = 8.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            items(AccessibilityState.entries) { state ->
+                                val selected = state in filter.states
+                                FilterChip(
+                                    selected = selected,
+                                    onClick = {
+                                        val next = filter.states.toMutableSet().apply {
+                                            if (selected) remove(state) else add(state)
+                                        }
+                                        onStatesChange(next)
+                                    },
+                                    label = { Text(state.label) },
+                                    colors = FilterChipDefaults.filterChipColors(
+                                        selectedContainerColor = state.getColor(),
+                                        selectedLabelColor = Color.White
+                                    )
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -653,45 +666,14 @@ fun PlaceBottomSheet(
 
                 Spacer(modifier = Modifier.height(16.dp))
 
+                // Estado global del semaforo (sin nota media ni estrellas: la
+                // accesibilidad nunca se colapsa a un numero).
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    place.averageAccessibility?.let { avgScore ->
-                        AccessibilityChip(level = avgScore.level)
-                    } ?: run {
-                        Surface(
-                            shape = RoundedCornerShape(12.dp),
-                            color = colors.accessNoDataBg
-                        ) {
-                            Text(
-                                text = "Sin datos",
-                                style = MaterialTheme.typography.labelMedium,
-                                fontWeight = FontWeight.SemiBold,
-                                color = colors.accessNoData,
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
-                            )
-                        }
-                    }
-
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Star,
-                            contentDescription = null,
-                            tint = colors.starRating,
-                            modifier = Modifier.size(20.dp)
-                        )
-                        Text(
-                            text = place.rating.toString(),
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.SemiBold,
-                            color = colors.textPrimary
-                        )
-                    }
+                    AccessibilityStateChip(state = place.overallState)
                 }
 
                 Spacer(modifier = Modifier.height(16.dp))
@@ -775,106 +757,20 @@ fun CategoryChip(
     }
 }
 
+/**
+ * Chip del semaforo de accesibilidad: etiqueta de texto + color por estado
+ * (nunca solo color, requisito de accesibilidad). Gris = sin datos, con la
+ * misma dignidad visual que el resto de estados.
+ */
 @Composable
-fun AccessibilityTypeRow(
-    icon: ImageVector,
-    label: String,
-    score: AccessibilityScore?,
+fun AccessibilityStateChip(
+    state: AccessibilityState,
     modifier: Modifier = Modifier
 ) {
-    val colors = AccessPathTheme.colors
-
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
-            .background(colors.surfaceVariant)
-            .padding(12.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.weight(1f)
-        ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                tint = colors.primary,
-                modifier = Modifier.size(20.dp)
-            )
-            Text(
-                text = label,
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.Medium,
-                color = colors.textPrimary
-            )
-        }
-
-        if (score != null) {
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = score.score.formatScore(),
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = score.level.getColor()
-                )
-
-                Box(
-                    modifier = Modifier
-                        .size(8.dp)
-                        .clip(CircleShape)
-                        .background(score.level.getColor())
-                )
-            }
-        } else {
-            Text(
-                text = "Sin datos",
-                style = MaterialTheme.typography.bodySmall,
-                color = colors.textTertiary
-            )
-        }
-    }
-}
-
-@Composable
-fun AccessibilityChip(
-    level: AccessibilityLevel,
-    modifier: Modifier = Modifier
-) {
-    val colors = AccessPathTheme.colors
-
-    val (color, bgColor, text) = when (level) {
-        AccessibilityLevel.VERY_EASY -> Triple(
-            colors.accessVeryEasy,
-            colors.accessVeryEasyBg,
-            "Muy Accesible"
-        )
-        AccessibilityLevel.EASY -> Triple(
-            colors.accessEasy,
-            colors.accessEasyBg,
-            "Accesible"
-        )
-        AccessibilityLevel.MODERATE -> Triple(
-            colors.accessModerate,
-            colors.accessModerateBg,
-            "Moderado"
-        )
-        AccessibilityLevel.DIFFICULT -> Triple(
-            colors.accessDifficult,
-            colors.accessDifficultBg,
-            "Difícil"
-        )
-    }
-
     Surface(
         modifier = modifier,
         shape = RoundedCornerShape(12.dp),
-        color = bgColor
+        color = state.getBgColor()
     ) {
         Row(
             modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
@@ -884,14 +780,14 @@ fun AccessibilityChip(
             Icon(
                 imageVector = Icons.AutoMirrored.Filled.Accessible,
                 contentDescription = null,
-                tint = color,
+                tint = state.getColor(),
                 modifier = Modifier.size(16.dp)
             )
             Text(
-                text = text,
+                text = state.label,
                 style = MaterialTheme.typography.labelMedium,
                 fontWeight = FontWeight.SemiBold,
-                color = color
+                color = state.getColor()
             )
         }
     }
@@ -1029,30 +925,22 @@ private fun GoogleSuggestionRow(
     }
 }
 
+/** Color de primer plano del semaforo (paleta WCAG AA del tema). */
 @Composable
-fun AccessibilityLevel.getColor() = when (this) {
-    AccessibilityLevel.VERY_EASY -> AccessPathTheme.colors.accessVeryEasy
-    AccessibilityLevel.EASY -> AccessPathTheme.colors.accessEasy
-    AccessibilityLevel.MODERATE -> AccessPathTheme.colors.accessModerate
-    AccessibilityLevel.DIFFICULT -> AccessPathTheme.colors.accessDifficult
+fun AccessibilityState.getColor() = when (this) {
+    AccessibilityState.GREEN -> AccessPathTheme.colors.accessVeryEasy
+    AccessibilityState.YELLOW -> AccessPathTheme.colors.accessModerate
+    AccessibilityState.RED -> AccessPathTheme.colors.accessDifficult
+    AccessibilityState.NO_DATA -> AccessPathTheme.colors.accessNoData
 }
 
-private fun Double.formatScore(): String {
-    val rounded = kotlin.math.round(this * 10) / 10.0
-    val str = rounded.toString()
-    return if ('.' in str) {
-        val parts = str.split('.')
-        "${parts[0]}.${parts[1].take(1)}"
-    } else {
-        "$str.0"
-    }
-}
-
-private fun formatFilterRating(value: Float): String {
-    val rounded = (value * 10).roundToInt() / 10.0
-    val whole = rounded.toInt()
-    val decimal = ((rounded - whole) * 10).roundToInt()
-    return "$whole.$decimal"
+/** Color de fondo suave del semaforo (paleta WCAG AA del tema). */
+@Composable
+fun AccessibilityState.getBgColor() = when (this) {
+    AccessibilityState.GREEN -> AccessPathTheme.colors.accessVeryEasyBg
+    AccessibilityState.YELLOW -> AccessPathTheme.colors.accessModerateBg
+    AccessibilityState.RED -> AccessPathTheme.colors.accessDifficultBg
+    AccessibilityState.NO_DATA -> AccessPathTheme.colors.accessNoDataBg
 }
 
 fun PlaceCategory.getIcon(): ImageVector = when (this) {

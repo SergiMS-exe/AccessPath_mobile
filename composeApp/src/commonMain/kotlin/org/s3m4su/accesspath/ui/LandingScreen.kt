@@ -39,6 +39,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlin.math.abs
 import kotlinx.coroutines.launch
 import org.s3m4su.accesspath.data.Place
@@ -65,16 +66,22 @@ fun LandingScreen(
     onRequestPermission: (suspend () -> Boolean)? = null,
     selectedPlace: Place? = null,
     onSelectedPlaceChange: (Place?) -> Unit = {},
-    onPlaceDetails: (Place) -> Unit = {}
+    onPlaceDetails: (Place) -> Unit = {},
+    onOpenProfile: () -> Unit = {}
 ) {
     // Acceder al tema desde el contexto (como useContext en React)
     val isDarkMode = AccessPathTheme.isDark
     val onDarkModeToggle = AccessPathTheme.toggleDarkMode
-    var currentLocation by remember { mutableStateOf<Location?>(null) }
-    var places by remember { mutableStateOf<List<Place>>(emptyList()) }
-    var zoom by remember { mutableStateOf(15f) }
-    var mapCenter by remember { mutableStateOf<Location?>(null) }
-    var locationDisabled by remember { mutableStateOf(false) }
+
+    // Estado del mapa en un ViewModel: sobrevive al viaje Detail -> Landing,
+    // asi que al volver NO se repite la peticion de lugares al backend.
+    val landingViewModel: LandingViewModel = viewModel(key = "landing") { LandingViewModel() }
+    var currentLocation by landingViewModel::currentLocation
+    var places by landingViewModel::places
+    var zoom by landingViewModel::zoom
+    var mapCenter by landingViewModel::mapCenter
+    var locationDisabled by landingViewModel::locationDisabled
+
     var selectedMenuItem by remember { mutableStateOf(DrawerMenuItem.HOME) }
     var filter by remember { mutableStateOf(PlaceFilter()) }
 
@@ -83,7 +90,7 @@ fun LandingScreen(
 
     var searchActive by remember { mutableStateOf(false) }
     var mapBounds by remember { mutableStateOf<MapBounds?>(null) }   // region visible actual
-    var loadedBounds by remember { mutableStateOf<MapBounds?>(null) } // region ya cargada
+    var loadedBounds by landingViewModel::loadedBounds               // region ya cargada (persistida)
     val focusManager = LocalFocusManager.current
 
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
@@ -113,20 +120,21 @@ fun LandingScreen(
         mapCenter = currentLocation ?: Location(40.4168, -3.7038)
     }
 
-    // Trae los lugares publicados de una region y la marca como cargada.
+    // Trae los lugares publicados de una region (con su semaforo) y la marca como cargada.
     val loadArea: suspend (MapBounds) -> Unit = { b ->
-        PlaceApi.mapPlaces(b.minLat, b.maxLat, b.minLng, b.maxLng)
-            .onSuccess { dtos -> places = dtos.map { it.toDomain() } }
+        PlaceApi.mapPins(b.minLat, b.maxLat, b.minLng, b.maxLng)
+            .onSuccess { pins -> places = pins }
         loadedBounds = b
     }
 
     LaunchedEffect(Unit) {
-        // Al volver del detalle selectedPlace ya tiene valor: centrar en el lugar.
-        // En el arranque inicial no hay lugar seleccionado: centrar en el usuario.
-        if (selectedPlace != null) {
-            mapCenter = Location(selectedPlace.latitude, selectedPlace.longitude)
-        } else {
-            refreshLocation()
+        when {
+            // Al volver del detalle selectedPlace ya tiene valor: centrar en el lugar.
+            selectedPlace != null ->
+                mapCenter = Location(selectedPlace.latitude, selectedPlace.longitude)
+            // Arranque inicial (sin estado previo): localizar y centrar.
+            mapCenter == null -> refreshLocation()
+            // Si no, volvemos con mapa y lugares ya cargados: no tocar nada.
         }
     }
 
@@ -153,8 +161,12 @@ fun LandingScreen(
                 selectedItem = selectedMenuItem,
                 isDarkMode = isDarkMode,
                 onItemSelected = { item ->
-                    selectedMenuItem = item
                     scope.launch { drawerState.close() }
+                    if (item == DrawerMenuItem.ACCESSIBILITY_PROFILE) {
+                        onOpenProfile()
+                    } else {
+                        selectedMenuItem = item
+                    }
                 },
                 onDarkModeToggle = onDarkModeToggle,
                 onLogout = {
@@ -211,8 +223,8 @@ fun LandingScreen(
                     },
                     filter = filter,
                     onCategoriesChange = { filter = filter.copy(categories = it) },
-                    onMinAccessibilityChange = { filter = filter.copy(minAccessibility = it) },
-                    onClearFilters = { filter = filter.copy(categories = emptySet(), minAccessibility = 0f) },
+                    onStatesChange = { filter = filter.copy(states = it) },
+                    onClearFilters = { filter = filter.copy(categories = emptySet(), states = emptySet()) },
                     places = places,
                     onActiveChange = { searchActive = it },
                     onPlaceSelected = { place ->

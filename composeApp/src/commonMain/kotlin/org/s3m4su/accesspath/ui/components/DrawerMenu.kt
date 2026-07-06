@@ -32,6 +32,7 @@ enum class DrawerMenuItem {
     HOME,
     SAVED_PLACES,
     MY_REVIEWS,
+    ACCESSIBILITY_PROFILE,
     SETTINGS
 }
 
@@ -157,6 +158,19 @@ fun DrawerMenu(
             contentColor = contentColor,
             selectedContentColor = selectedItemContentColor,
             onClick = { onItemSelected(DrawerMenuItem.MY_REVIEWS) }
+        )
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        DrawerMenuItemRow(
+            icon = Icons.Default.AccessibilityNew,
+            label = "Mi perfil de accesibilidad",
+            isSelected = selectedItem == DrawerMenuItem.ACCESSIBILITY_PROFILE,
+            itemBgColor = itemBgColor,
+            selectedBgColor = selectedItemBgColor,
+            contentColor = contentColor,
+            selectedContentColor = selectedItemContentColor,
+            onClick = { onItemSelected(DrawerMenuItem.ACCESSIBILITY_PROFILE) }
         )
 
         Spacer(modifier = Modifier.height(8.dp))

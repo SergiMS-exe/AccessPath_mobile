@@ -4,17 +4,12 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.Accessible
-import androidx.compose.material.icons.filled.Hearing
-import androidx.compose.material.icons.filled.Psychology
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import org.s3m4su.accesspath.data.AccessibilityLevel
-import org.s3m4su.accesspath.data.AccessibilityScore
 import org.s3m4su.accesspath.data.PlaceCategory
+import org.s3m4su.accesspath.data.accessibility.AccessibilityState
 import org.s3m4su.accesspath.ui.landing.PlaceFilter
 import org.s3m4su.accesspath.ui.theme.AccessPathTheme
 
@@ -34,7 +29,7 @@ fun SearchBarEmptyLightPreview() {
             onMenuClick = {},
             filter = PlaceFilter(),
             onCategoriesChange = {},
-            onMinAccessibilityChange = {},
+            onStatesChange = {},
             onClearFilters = {},
             places = previewPlaces,
             onPlaceSelected = {},
@@ -53,7 +48,7 @@ fun SearchBarEmptyDarkPreview() {
             onMenuClick = {},
             filter = PlaceFilter(),
             onCategoriesChange = {},
-            onMinAccessibilityChange = {},
+            onStatesChange = {},
             onClearFilters = {},
             places = previewPlaces,
             onPlaceSelected = {},
@@ -73,10 +68,10 @@ fun SearchBarWithFiltersLightPreview() {
             filter = PlaceFilter(
                 query = "Museo",
                 categories = setOf(PlaceCategory.MUSEUM, PlaceCategory.LIBRARY),
-                minAccessibility = 3.5f
+                states = setOf(AccessibilityState.GREEN)
             ),
             onCategoriesChange = {},
-            onMinAccessibilityChange = {},
+            onStatesChange = {},
             onClearFilters = {},
             places = previewPlaces,
             onPlaceSelected = {},
@@ -87,9 +82,9 @@ fun SearchBarWithFiltersLightPreview() {
 
 // --- PlaceBottomSheet --------------------------------------------------------
 
-@Preview(showBackground = true, name = "BottomSheet — muy accesible (Light)")
+@Preview(showBackground = true, name = "BottomSheet — accesible (Light)")
 @Composable
-fun PlaceBottomSheetVeryEasyLightPreview() {
+fun PlaceBottomSheetGreenLightPreview() {
     AccessPathTheme(darkTheme = false) {
         PlaceBottomSheet(
             place = previewPlaceMuseum,
@@ -100,9 +95,9 @@ fun PlaceBottomSheetVeryEasyLightPreview() {
     }
 }
 
-@Preview(showBackground = true, name = "BottomSheet — muy accesible (Dark)", backgroundColor = 0xFF121212)
+@Preview(showBackground = true, name = "BottomSheet — accesible (Dark)", backgroundColor = 0xFF121212)
 @Composable
-fun PlaceBottomSheetVeryEasyDarkPreview() {
+fun PlaceBottomSheetGreenDarkPreview() {
     AccessPathTheme(darkTheme = true) {
         PlaceBottomSheet(
             place = previewPlaceLibrary,
@@ -113,9 +108,9 @@ fun PlaceBottomSheetVeryEasyDarkPreview() {
     }
 }
 
-@Preview(showBackground = true, name = "BottomSheet — dificil acceso")
+@Preview(showBackground = true, name = "BottomSheet — no accesible")
 @Composable
-fun PlaceBottomSheetDifficultPreview() {
+fun PlaceBottomSheetRedPreview() {
     AccessPathTheme(darkTheme = false) {
         PlaceBottomSheet(
             place = previewPlaceDifficult,
@@ -186,92 +181,36 @@ fun DrawerMenuBasicUserPreview() {
     }
 }
 
-// --- AccessibilityChips ------------------------------------------------------
+// --- Chips del semaforo ------------------------------------------------------
 
-@Preview(showBackground = true, name = "Chips de accesibilidad (Light)")
+@Preview(showBackground = true, name = "Semaforo — 4 estados (Light)")
 @Composable
-fun AccessibilityChipsLightPreview() {
+fun AccessibilityStateChipsLightPreview() {
     AccessPathTheme(darkTheme = false) {
         Column(
             modifier = Modifier.padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            AccessibilityChip(level = AccessibilityLevel.VERY_EASY)
-            AccessibilityChip(level = AccessibilityLevel.EASY)
-            AccessibilityChip(level = AccessibilityLevel.MODERATE)
-            AccessibilityChip(level = AccessibilityLevel.DIFFICULT)
+            AccessibilityStateChip(state = AccessibilityState.GREEN)
+            AccessibilityStateChip(state = AccessibilityState.YELLOW)
+            AccessibilityStateChip(state = AccessibilityState.RED)
+            AccessibilityStateChip(state = AccessibilityState.NO_DATA)
         }
     }
 }
 
-@Preview(showBackground = true, name = "Chips de accesibilidad (Dark)", backgroundColor = 0xFF121212)
+@Preview(showBackground = true, name = "Semaforo — 4 estados (Dark)", backgroundColor = 0xFF121212)
 @Composable
-fun AccessibilityChipsDarkPreview() {
+fun AccessibilityStateChipsDarkPreview() {
     AccessPathTheme(darkTheme = true) {
         Column(
             modifier = Modifier.padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            AccessibilityChip(level = AccessibilityLevel.VERY_EASY)
-            AccessibilityChip(level = AccessibilityLevel.EASY)
-            AccessibilityChip(level = AccessibilityLevel.MODERATE)
-            AccessibilityChip(level = AccessibilityLevel.DIFFICULT)
-        }
-    }
-}
-
-// --- AccessibilityTypeRow ----------------------------------------------------
-
-@Preview(showBackground = true, name = "Filas de accesibilidad por dimension")
-@Composable
-fun AccessibilityTypeRowsPreview() {
-    AccessPathTheme(darkTheme = false) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            AccessibilityTypeRow(
-                icon = Icons.AutoMirrored.Filled.Accessible,
-                label = "Fisica",
-                score = AccessibilityScore.fromScore(4.5)
-            )
-            AccessibilityTypeRow(
-                icon = Icons.Default.Hearing,
-                label = "Sensorial",
-                score = AccessibilityScore.fromScore(3.2)
-            )
-            AccessibilityTypeRow(
-                icon = Icons.Default.Psychology,
-                label = "Cognitiva",
-                score = null
-            )
-        }
-    }
-}
-
-@Preview(showBackground = true, name = "Filas de accesibilidad (Dark)", backgroundColor = 0xFF121212)
-@Composable
-fun AccessibilityTypeRowsDarkPreview() {
-    AccessPathTheme(darkTheme = true) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            AccessibilityTypeRow(
-                icon = Icons.AutoMirrored.Filled.Accessible,
-                label = "Fisica",
-                score = AccessibilityScore.fromScore(5.0)
-            )
-            AccessibilityTypeRow(
-                icon = Icons.Default.Hearing,
-                label = "Sensorial",
-                score = AccessibilityScore.fromScore(4.8)
-            )
-            AccessibilityTypeRow(
-                icon = Icons.Default.Psychology,
-                label = "Cognitiva",
-                score = AccessibilityScore.fromScore(1.2)
-            )
+            AccessibilityStateChip(state = AccessibilityState.GREEN)
+            AccessibilityStateChip(state = AccessibilityState.YELLOW)
+            AccessibilityStateChip(state = AccessibilityState.RED)
+            AccessibilityStateChip(state = AccessibilityState.NO_DATA)
         }
     }
 }
@@ -296,11 +235,38 @@ fun CategoryChipsPreview() {
                 CategoryChip(category = "Hotel")
                 CategoryChip(category = "Parque")
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                CategoryChip(category = "Hospital")
-                CategoryChip(category = "Transporte")
-                CategoryChip(category = "Farmacia")
-            }
+        }
+    }
+}
+
+// --- PhotoGallery ------------------------------------------------------------
+
+@Preview(showBackground = true, name = "PhotoGallery — con fotos (Light)")
+@Composable
+fun PhotoGalleryLightPreview() {
+    AccessPathTheme(darkTheme = false) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            PhotoGallery(photos = previewPhotos, onPhotoClick = {})
+        }
+    }
+}
+
+@Preview(showBackground = true, name = "PhotoGallery — con fotos (Dark)", backgroundColor = 0xFF121212)
+@Composable
+fun PhotoGalleryDarkPreview() {
+    AccessPathTheme(darkTheme = true) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            PhotoGallery(photos = previewPhotos, onPhotoClick = {})
+        }
+    }
+}
+
+@Preview(showBackground = true, name = "PhotoGallery — sin fotos")
+@Composable
+fun PhotoGalleryEmptyPreview() {
+    AccessPathTheme(darkTheme = false) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            PhotoGallery(photos = emptyList(), onPhotoClick = {})
         }
     }
 }

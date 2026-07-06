@@ -34,15 +34,14 @@ data class PlaceDto(
     @SerialName("updated_at")      val updatedAt: String
 )
 
-// Convierte el DTO de la API al modelo de dominio que pinta el mapa/UI.
-// Categoria y accesibilidad aun no llegan en este endpoint: defaults neutros.
+// Convierte el DTO plano (importacion de Google / CRUD) al modelo de dominio.
+// Un lugar recien importado no tiene contribuciones: estado NO_DATA (gris).
 fun PlaceDto.toDomain(): Place = Place(
     id = id.toString(),
     name = name,
     address = address ?: "",
     latitude = latitude,
     longitude = longitude,
-    rating = 0f,
     category = PlaceCategory.OTHER,
     description = description
 )

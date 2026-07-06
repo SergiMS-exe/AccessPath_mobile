@@ -2,18 +2,17 @@ package org.s3m4su.accesspath.map
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.interop.UIKitView
 import kotlinx.cinterop.ExperimentalForeignApi
-import kotlinx.cinterop.CValue
 import kotlinx.cinterop.useContents
-import platform.CoreLocation.CLLocationCoordinate2D
 import platform.CoreLocation.CLLocationCoordinate2DMake
 import platform.MapKit.*
 import platform.darwin.NSObject
 import platform.UIKit.UIColor
 import org.s3m4su.accesspath.data.Place
-import org.s3m4su.accesspath.data.AccessibilityLevel
+import org.s3m4su.accesspath.data.accessibility.AccessibilityState
 
 @OptIn(ExperimentalForeignApi::class)
 @Composable
@@ -26,13 +25,88 @@ actual fun MapViewWithMarkers(
     onPlaceClick: (Place) -> Unit,
     onCameraIdle: ((MapBounds) -> Unit)?
 ) {
-    val coordinate = remember(latitude, longitude) {
-        CLLocationCoordinate2DMake(latitude, longitude)
-    }
-
     val metersPerZoom = remember(zoom) {
         val baseMeters = 1000.0
         baseMeters * (15.0 / zoom)
+    }
+
+    // Estado "vivo" que el delegate lee en cada callback: asi los closures no se
+    // quedan con la lista de lugares de la primera composicion.
+    val currentPlaces = rememberUpdatedState(places)
+    val currentOnPlaceClick = rememberUpdatedState(onPlaceClick)
+    val currentOnCameraIdle = rememberUpdatedState(onCameraIdle)
+
+    // El delegate se crea UNA vez y se recuerda: si se creara dentro de factory
+    // sin referencia fuerte, el GC de Kotlin/Native podria liberarlo (MKMapView
+    // solo guarda una referencia debil a su delegate).
+    val mapDelegate = remember {
+        object : NSObject(), MKMapViewDelegateProtocol {
+            // Cuando el usuario deja de mover el mapa, reporta la region visible.
+            override fun mapView(
+                mapView: MKMapView,
+                regionDidChangeAnimated: Boolean
+            ) {
+                mapView.region.useContents {
+                    currentOnCameraIdle.value?.invoke(
+                        MapBounds(
+                            minLat = center.latitude - span.latitudeDelta / 2.0,
+                            maxLat = center.latitude + span.latitudeDelta / 2.0,
+                            minLng = center.longitude - span.longitudeDelta / 2.0,
+                            maxLng = center.longitude + span.longitudeDelta / 2.0
+                        )
+                    )
+                }
+            }
+
+            override fun mapView(
+                mapView: MKMapView,
+                didSelectAnnotation: MKAnnotationProtocol
+            ) {
+                val annotation = didSelectAnnotation as? MKPointAnnotation
+                annotation?.let {
+                    currentPlaces.value.find { place ->
+                        place.name == annotation.title()
+                    }?.let { place ->
+                        currentOnPlaceClick.value(place)
+                    }
+                }
+            }
+
+            override fun mapView(
+                mapView: MKMapView,
+                viewForAnnotation: MKAnnotationProtocol
+            ): MKAnnotationView? {
+                if (viewForAnnotation is MKUserLocation) {
+                    return null
+                }
+
+                val identifier = "PlaceMarker"
+                var annotationView = mapView.dequeueReusableAnnotationViewWithIdentifier(identifier)
+
+                if (annotationView == null) {
+                    annotationView = MKMarkerAnnotationView(viewForAnnotation, identifier)
+                    annotationView.canShowCallout = true
+                } else {
+                    annotationView.annotation = viewForAnnotation
+                }
+
+                // Colorea por el estado global del semaforo (4 estados).
+                val markerView = annotationView as? MKMarkerAnnotationView
+                val annotation = viewForAnnotation as? MKPointAnnotation
+                annotation?.title()?.let { title ->
+                    currentPlaces.value.find { it.name == title }?.let { place ->
+                        markerView?.markerTintColor = when (place.overallState) {
+                            AccessibilityState.GREEN -> UIColor.systemGreenColor
+                            AccessibilityState.YELLOW -> UIColor.systemOrangeColor
+                            AccessibilityState.RED -> UIColor.systemRedColor
+                            AccessibilityState.NO_DATA -> UIColor.systemBlueColor
+                        }
+                    }
+                }
+
+                return annotationView
+            }
+        }
     }
 
     UIKitView(
@@ -40,105 +114,37 @@ actual fun MapViewWithMarkers(
         factory = {
             MKMapView().apply {
                 showsUserLocation = true
-                
-                // Set initial region
+
                 val region = MKCoordinateRegionMakeWithDistance(
-                    coordinate,
+                    CLLocationCoordinate2DMake(latitude, longitude),
                     metersPerZoom,
                     metersPerZoom
                 )
                 setRegion(region, animated = false)
-                
-                // Add annotations for places
-                places.forEach { place ->
-                    val annotation = MKPointAnnotation().apply {
-                        setCoordinate(CLLocationCoordinate2DMake(place.latitude, place.longitude))
-                        setTitle(place.name)
-                        setSubtitle(place.address)
-                    }
-                    addAnnotation(annotation)
-                }
-                
-                // Set up delegate to handle marker taps
-                val mapDelegate = object : NSObject(), MKMapViewDelegateProtocol {
-                    // Cuando el usuario deja de mover el mapa, reporta la region visible.
-                    override fun mapView(
-                        mapView: MKMapView,
-                        regionDidChangeAnimated: Boolean
-                    ) {
-                        mapView.region.useContents {
-                            onCameraIdle?.invoke(
-                                MapBounds(
-                                    minLat = center.latitude - span.latitudeDelta / 2.0,
-                                    maxLat = center.latitude + span.latitudeDelta / 2.0,
-                                    minLng = center.longitude - span.longitudeDelta / 2.0,
-                                    maxLng = center.longitude + span.longitudeDelta / 2.0
-                                )
-                            )
-                        }
-                    }
-
-                    override fun mapView(
-                        mapView: MKMapView,
-                        didSelectAnnotation: MKAnnotationProtocol
-                    ) {
-                        val annotation = didSelectAnnotation as? MKPointAnnotation
-                        annotation?.let {
-                            // Find the place that matches this annotation
-                            places.find { place ->
-                                place.name == annotation.title()
-                            }?.let { place ->
-                                onPlaceClick(place)
-                            }
-                        }
-                    }
-                    
-                    override fun mapView(
-                        mapView: MKMapView,
-                        viewForAnnotation: MKAnnotationProtocol
-                    ): MKAnnotationView? {
-                        if (viewForAnnotation is MKUserLocation) {
-                            return null
-                        }
-                        
-                        val identifier = "PlaceMarker"
-                        var annotationView = mapView.dequeueReusableAnnotationViewWithIdentifier(identifier)
-                        
-                        if (annotationView == null) {
-                            annotationView = MKMarkerAnnotationView(viewForAnnotation, identifier)
-                            annotationView.canShowCallout = true
-                        } else {
-                            annotationView.annotation = viewForAnnotation
-                        }
-                        
-                        // Color code markers based on accessibility
-                        val markerView = annotationView as? MKMarkerAnnotationView
-                        val annotation = viewForAnnotation as? MKPointAnnotation
-                        annotation?.title()?.let { title ->
-                            places.find { it.name == title }?.let { place ->
-                                markerView?.markerTintColor = when (place.accessibilityLevel) {
-                                    AccessibilityLevel.VERY_EASY -> UIColor.systemGreenColor
-                                    AccessibilityLevel.EASY -> UIColor.systemYellowColor
-                                    AccessibilityLevel.MODERATE -> UIColor.systemOrangeColor
-                                    AccessibilityLevel.DIFFICULT -> UIColor.systemRedColor
-                                }
-                            }
-                        }
-                        
-                        return annotationView
-                    }
-                }
-                
                 setDelegate(mapDelegate)
             }
         },
         update = { mapView ->
+            // Centrar/zoom en cada actualizacion de estado.
             val region = MKCoordinateRegionMakeWithDistance(
                 CLLocationCoordinate2DMake(latitude, longitude),
                 metersPerZoom,
                 metersPerZoom
             )
             mapView.setRegion(region, animated = true)
+
+            // Sincronizar los marcadores con la lista actual (no solo en factory:
+            // los lugares llegan async despues de crear el mapa).
+            val existing = mapView.annotations.filterIsInstance<MKPointAnnotation>()
+            mapView.removeAnnotations(existing)
+            places.forEach { place ->
+                val annotation = MKPointAnnotation().apply {
+                    setCoordinate(CLLocationCoordinate2DMake(place.latitude, place.longitude))
+                    setTitle(place.name)
+                    setSubtitle(place.address)
+                }
+                mapView.addAnnotation(annotation)
+            }
         }
     )
 }

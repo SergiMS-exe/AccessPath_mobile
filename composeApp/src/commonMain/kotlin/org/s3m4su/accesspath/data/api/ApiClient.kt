@@ -19,8 +19,9 @@ import kotlinx.serialization.json.Json
 import org.s3m4su.accesspath.data.auth.AuthRepository
 import org.s3m4su.accesspath.data.auth.RefreshResponse
 
-// IP del servidor de desarrollo. Cambiar si se mueve el backend.
-const val API_BASE_URL = "http://192.168.1.130:8080"
+// URL base del backend, resuelta por entorno via el actual de [apiBaseUrl]
+// (antes hardcodeada). Se mantiene el nombre API_BASE_URL para el resto de APIs.
+val API_BASE_URL: String = apiBaseUrl
 
 val httpClient = HttpClient {
     install(ContentNegotiation) {
@@ -30,7 +31,10 @@ val httpClient = HttpClient {
         })
     }
     install(Logging) {
-        level = LogLevel.BODY
+        // INFO registra solo las lineas de request/response (metodo, url, status).
+        // NUNCA BODY ni HEADERS: el header Authorization y los cuerpos filtrarian
+        // tokens al log. Para depurar puntualmente, subir el nivel en local.
+        level = LogLevel.INFO
     }
     install(Auth) {
         bearer {

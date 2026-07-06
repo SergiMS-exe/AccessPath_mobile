@@ -17,7 +17,7 @@ import com.google.maps.android.compose.Marker
 import com.google.maps.android.compose.MarkerState
 import com.google.maps.android.compose.rememberCameraPositionState
 import org.s3m4su.accesspath.data.Place
-import org.s3m4su.accesspath.data.AccessibilityLevel
+import org.s3m4su.accesspath.data.accessibility.AccessibilityState
 
 @Composable
 actual fun MapViewWithMarkers(
@@ -69,17 +69,16 @@ actual fun MapViewWithMarkers(
             mapToolbarEnabled = false
         )
     ) {
-        // Add markers for all places
+        // Marcadores coloreados por el estado global del semaforo (peor dimension
+        // bloqueante). Gris/sin datos se pinta azul para distinguirlo del resto.
         places.forEach { place ->
             val markerPosition = LatLng(place.latitude, place.longitude)
-            val markerColor = place.averageAccessibility?.level?.let { level ->
-                when (level) {
-                    AccessibilityLevel.VERY_EASY -> BitmapDescriptorFactory.HUE_GREEN
-                    AccessibilityLevel.EASY -> BitmapDescriptorFactory.HUE_YELLOW
-                    AccessibilityLevel.MODERATE -> BitmapDescriptorFactory.HUE_ORANGE
-                    AccessibilityLevel.DIFFICULT -> BitmapDescriptorFactory.HUE_RED
-                }
-            } ?: BitmapDescriptorFactory.HUE_AZURE
+            val markerColor = when (place.overallState) {
+                AccessibilityState.GREEN -> BitmapDescriptorFactory.HUE_GREEN
+                AccessibilityState.YELLOW -> BitmapDescriptorFactory.HUE_ORANGE
+                AccessibilityState.RED -> BitmapDescriptorFactory.HUE_RED
+                AccessibilityState.NO_DATA -> BitmapDescriptorFactory.HUE_AZURE
+            }
 
             Marker(
                 state = MarkerState(position = markerPosition),

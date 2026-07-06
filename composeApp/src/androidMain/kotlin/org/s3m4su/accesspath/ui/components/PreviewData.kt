@@ -1,13 +1,52 @@
 package org.s3m4su.accesspath.ui.components
 
-import org.s3m4su.accesspath.data.AccessibilityFeature
-import org.s3m4su.accesspath.data.AccessibilityScore
-import org.s3m4su.accesspath.data.MockPlaces
 import org.s3m4su.accesspath.data.Place
 import org.s3m4su.accesspath.data.PlaceCategory
+import org.s3m4su.accesspath.data.accessibility.AccessibilityState
+import org.s3m4su.accesspath.data.accessibility.Confidence
+import org.s3m4su.accesspath.data.accessibility.CriterionScore
+import org.s3m4su.accesspath.data.accessibility.DimensionScore
 
 // Datos de muestra compartidos por las previews de vistas y de componentes.
 // `internal` para poder usarlos desde varios ficheros del mismo modulo.
+
+private fun previewCriterion(
+    id: Long,
+    key: String,
+    prompt: String,
+    state: AccessibilityState,
+    nYes: Int = 3,
+    nNo: Int = 0
+) = CriterionScore(
+    criterionId = id,
+    key = key,
+    prompt = prompt,
+    isBlocking = false,
+    state = state,
+    conflict = false,
+    nYes = nYes,
+    nNo = nNo,
+    nUnsure = 1,
+    qualityP50 = 4.0,
+    confidence = Confidence(level = "medium", nDefined = nYes + nNo, nUnsure = 1)
+)
+
+private fun previewDimension(
+    id: Long,
+    key: String,
+    name: String,
+    state: AccessibilityState
+) = DimensionScore(
+    dimensionId = id,
+    key = key,
+    name = name,
+    state = state,
+    conflict = false,
+    criteria = listOf(
+        previewCriterion(id * 10 + 1, "$key.uno", "¿Criterio de ejemplo uno?", state),
+        previewCriterion(id * 10 + 2, "$key.dos", "¿Criterio de ejemplo dos?", AccessibilityState.NO_DATA, nYes = 0)
+    )
+)
 
 internal val previewPlaceCafe = Place(
     id = "1",
@@ -15,17 +54,12 @@ internal val previewPlaceCafe = Place(
     address = "Av. Principal 123, Madrid",
     latitude = 40.4168,
     longitude = -3.7038,
-    rating = 4.8f,
     category = PlaceCategory.CAFE,
     description = "Café acogedor en el centro con rampa de acceso y baño adaptado.",
-    physicalAccessibility = AccessibilityScore.fromScore(4.5),
-    sensoryAccessibility = AccessibilityScore.fromScore(3.8),
-    cognitiveAccessibility = AccessibilityScore.fromScore(4.2),
-    features = listOf(
-        AccessibilityFeature.WHEELCHAIR_ACCESS,
-        AccessibilityFeature.RAMP,
-        AccessibilityFeature.ACCESSIBLE_BATHROOM,
-        AccessibilityFeature.CLEAR_SIGNAGE
+    overallState = AccessibilityState.YELLOW,
+    dimensions = listOf(
+        previewDimension(1, "acceso", "Llegada y acceso", AccessibilityState.GREEN),
+        previewDimension(2, "aseos", "Aseos adaptados", AccessibilityState.YELLOW)
     )
 )
 
@@ -35,20 +69,13 @@ internal val previewPlaceMuseum = Place(
     address = "Paseo del Prado s/n, Madrid",
     latitude = 40.4138,
     longitude = -3.6921,
-    rating = 4.9f,
     category = PlaceCategory.MUSEUM,
     description = "Uno de los museos mas importantes del mundo, completamente accesible.",
-    physicalAccessibility = AccessibilityScore.fromScore(5.0),
-    sensoryAccessibility = AccessibilityScore.fromScore(4.8),
-    cognitiveAccessibility = AccessibilityScore.fromScore(4.5),
-    features = listOf(
-        AccessibilityFeature.WHEELCHAIR_ACCESS,
-        AccessibilityFeature.ELEVATOR,
-        AccessibilityFeature.ACCESSIBLE_BATHROOM,
-        AccessibilityFeature.BRAILLE_SIGNAGE,
-        AccessibilityFeature.AUDIO_GUIDES,
-        AccessibilityFeature.PICTOGRAMS,
-        AccessibilityFeature.SIGN_LANGUAGE
+    overallState = AccessibilityState.GREEN,
+    dimensions = listOf(
+        previewDimension(1, "acceso", "Llegada y acceso", AccessibilityState.GREEN),
+        previewDimension(2, "aseos", "Aseos adaptados", AccessibilityState.GREEN),
+        previewDimension(3, "sensorial_env", "Entorno sensorial", AccessibilityState.GREEN)
     )
 )
 
@@ -58,21 +85,12 @@ internal val previewPlaceLibrary = Place(
     address = "Paseo de Recoletos 20, Madrid",
     latitude = 40.4230,
     longitude = -3.6920,
-    rating = 4.7f,
     category = PlaceCategory.LIBRARY,
     description = "Biblioteca historica con todos los servicios de accesibilidad disponibles.",
-    physicalAccessibility = AccessibilityScore.fromScore(4.8),
-    sensoryAccessibility = AccessibilityScore.fromScore(4.6),
-    cognitiveAccessibility = AccessibilityScore.fromScore(4.9),
-    features = listOf(
-        AccessibilityFeature.WHEELCHAIR_ACCESS,
-        AccessibilityFeature.ELEVATOR,
-        AccessibilityFeature.ACCESSIBLE_BATHROOM,
-        AccessibilityFeature.HEARING_LOOP,
-        AccessibilityFeature.BRAILLE_SIGNAGE,
-        AccessibilityFeature.EASY_READING,
-        AccessibilityFeature.QUIET_SPACE,
-        AccessibilityFeature.TACTILE_PAVING
+    overallState = AccessibilityState.GREEN,
+    dimensions = listOf(
+        previewDimension(1, "acceso", "Llegada y acceso", AccessibilityState.GREEN),
+        previewDimension(4, "auditiva", "Comunicacion auditiva", AccessibilityState.GREEN)
     )
 )
 
@@ -82,12 +100,11 @@ internal val previewPlaceDifficult = Place(
     address = "Calle Serrano 89, Madrid",
     latitude = 40.4198,
     longitude = -3.7068,
-    rating = 4.3f,
     category = PlaceCategory.MALL,
-    physicalAccessibility = AccessibilityScore.fromScore(1.5),
-    sensoryAccessibility = AccessibilityScore.fromScore(1.8),
-    cognitiveAccessibility = AccessibilityScore.fromScore(2.2),
-    features = listOf(AccessibilityFeature.ELEVATOR)
+    overallState = AccessibilityState.RED,
+    dimensions = listOf(
+        previewDimension(1, "acceso", "Llegada y acceso", AccessibilityState.RED)
+    )
 )
 
 internal val previewPlaceNoData = Place(
@@ -96,11 +113,16 @@ internal val previewPlaceNoData = Place(
     address = "Calle Alcala 88, Madrid",
     latitude = 40.4200,
     longitude = -3.6950,
-    rating = 3.2f,
     category = PlaceCategory.RESTAURANT
 )
 
-internal val previewPlaces = MockPlaces.getMockPlaces()
+internal val previewPlaces = listOf(
+    previewPlaceCafe,
+    previewPlaceMuseum,
+    previewPlaceLibrary,
+    previewPlaceDifficult,
+    previewPlaceNoData
+)
 
 internal val previewUserContributor = UserProfile(
     name = "Ana Garcia",
@@ -114,3 +136,7 @@ internal val previewUserBasic = UserProfile(
     contributorLevel = 1,
     reviewCount = 4
 )
+
+// --- Fotos (seeds del placeholder) -------------------------------------------
+
+internal val previewPhotos = listOf("prev-a", "prev-b", "prev-c", "prev-d")
