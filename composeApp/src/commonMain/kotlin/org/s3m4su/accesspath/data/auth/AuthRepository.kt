@@ -51,12 +51,12 @@ object AuthRepository {
             _state.value = AuthState.Authenticated(response.token, response.user)
         }
 
+    // El backend devuelve LoginResponse directamente con tokens (ver
+    // user_handler.Register). No hace falta la doble llamada register+login.
     suspend fun register(username: String, email: String, password: String): Result<Unit> =
-        AuthApi.register(username, email, password).map {
-            AuthApi.login(email, password).getOrThrow().let { response ->
-                persist(response.token, response.refreshToken, response.user)
-                _state.value = AuthState.Authenticated(response.token, response.user)
-            }
+        AuthApi.register(username, email, password).map { response ->
+            persist(response.token, response.refreshToken, response.user)
+            _state.value = AuthState.Authenticated(response.token, response.user)
         }
 
     fun updateTokens(newToken: String, newRefreshToken: String) {

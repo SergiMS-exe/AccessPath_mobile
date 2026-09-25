@@ -5,6 +5,8 @@ import io.ktor.client.request.get
 import io.ktor.client.request.parameter
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
+import io.ktor.client.statement.HttpResponse
+import io.ktor.client.statement.request
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import org.s3m4su.accesspath.data.Place
@@ -18,10 +20,23 @@ private data class ImportFromGoogleBody(
 
 object PlaceApi {
     suspend fun search(query: String, sessionToken: String): Result<List<AutocompleteItemDto>> = runCatching {
-        httpClient.get("$API_BASE_URL/api/v1/places/search") {
+        val url = "$API_BASE_URL/api/v1/places/search?q=$query&session=$sessionToken"
+        println("[PlaceApi.search] GET $url")
+        val response: HttpResponse = httpClient.get("$API_BASE_URL/api/v1/places/search") {
             parameter("q", query)
             parameter("session", sessionToken)
-        }.body<ApiResponse<List<AutocompleteItemDto>>>().data ?: emptyList()
+        }
+        val requestId = response.headers[REQUEST_ID_HEADER]
+        val body = response.body<ApiResponse<List<AutocompleteItemDto>>>()
+        val items = body.data ?: emptyList()
+        println(
+            "[PlaceApi.search] <- ${response.status.value} ${response.request.method.value} " +
+            "$url | request_id=$requestId error=${body.error} items=${items.size} " +
+            "preview=${items.take(3).map { it.placeId }}"
+        )
+        items
+    }.onFailure { e ->
+        logApiFailure("search", "q=\"$query\"", e)
     }
 
     // Lugares publicados (con al menos una contribucion) en la region visible del
@@ -48,10 +63,28 @@ object PlaceApi {
     }
 
     suspend fun importFromGoogle(googlePlaceId: String, sessionToken: String): Result<PlaceDto> = runCatching {
-        val response = httpClient.post("$API_BASE_URL/api/v1/places/from-google") {
+        val url = "$API_BASE_URL/api/v1/places/from-google"
+        println("[PlaceApi.importFromGoogle] POST $url body={google_place_id=$googlePlaceId, session_token=$sessionToken}")
+        val response = httpClient.post(url) {
             setBody(ImportFromGoogleBody(googlePlaceId, sessionToken))
-        }.body<ApiResponse<PlaceDto>>()
+        }
+        val body = response.body<ApiResponse<PlaceDto>>()
+        val requestId = response.headers[REQUEST_ID_HEADER]
+        println(
+            "[PlaceApi.importFromGoogle] <- ${response.status.value} " +
+            "request_id=$requestId error=${body.error} placeId=${body.data?.id} name=${body.data?.name}"
+        )
         // Propagar el mensaje del backend (p.ej. "cerrado permanentemente", cuota).
-        response.data ?: throw IllegalStateException(response.error ?: "No se pudo añadir el lugar")
+        body.data ?: throw IllegalStateException(body.error ?: "No se pudo añadir el lugar")
+    }.onFailure { e ->
+        logApiFailure("importFromGoogle", "googlePlaceId=\"$googlePlaceId\"", e)
     }
+}
+
+private fun logApiFailure(op: String, ctx: String, e: Throwable) {
+    val (status, requestId) = when (e) {
+        is ApiException -> e.httpStatus to (e.requestId ?: "?")
+        else -> "?" to "?"
+    }
+    println("[PlaceApi.$op] !! fallo httpStatus=$status request_id=$requestId $ctx: ${e::class.simpleName} ${e.message}")
 }

@@ -1,6 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  Build de PRODUCCION: HTTPS unico, cleartext totalmente prohibido.
+  Cualquier intento de HTTP sera rechazado por Android, lo que protege
+  contra MITM y configuraciones accidentales en builds de release.
+  Para builds de dev con LAN, ver androidMain/res/xml/network_security_config.xml
+  antes de los cambios de flavors (este era el xml de dev).
+-->
 <network-security-config>
-    <domain-config cleartextTrafficPermitted="true">
-        <domain includeSubdomains="false">192.168.1.130</domain>
-    </domain-config>
+    <base-config cleartextTrafficPermitted="false">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
 </network-security-config>

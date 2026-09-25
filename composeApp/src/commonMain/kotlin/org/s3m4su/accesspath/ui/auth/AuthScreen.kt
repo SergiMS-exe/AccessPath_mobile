@@ -39,10 +39,11 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -55,50 +56,21 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
-import kotlinx.coroutines.launch
-import org.s3m4su.accesspath.data.auth.AuthRepository
+import androidx.lifecycle.viewmodel.compose.viewModel
 import org.s3m4su.accesspath.ui.theme.AccessPathTheme
-
-private enum class AuthTab { LOGIN, REGISTER }
 
 @Composable
 fun AuthScreen(onAuthenticated: () -> Unit) {
     val colors = AccessPathTheme.colors
-    val scope = rememberCoroutineScope()
+    val viewModel: AuthViewModel = viewModel(key = "auth") { AuthViewModel() }
+    val state by viewModel.state.collectAsState()
 
-    var tab by remember { mutableStateOf(AuthTab.LOGIN) }
-    var isLoading by remember { mutableStateOf(false) }
-    var errorMessage by remember { mutableStateOf<String?>(null) }
-
-    // Login fields
-    var loginEmail by remember { mutableStateOf("") }
-    var loginPassword by remember { mutableStateOf("") }
-
-    // Register fields
-    var regUsername by remember { mutableStateOf("") }
-    var regEmail by remember { mutableStateOf("") }
-    var regPassword by remember { mutableStateOf("") }
-    var regPasswordConfirm by remember { mutableStateOf("") }
-
-    fun submit() {
-        errorMessage = null
-        scope.launch {
-            isLoading = true
-            val result = if (tab == AuthTab.LOGIN) {
-                AuthRepository.login(loginEmail.trim(), loginPassword)
-            } else {
-                if (regPassword != regPasswordConfirm) {
-                    errorMessage = "Las contrasenas no coinciden"
-                    isLoading = false
-                    return@launch
-                }
-                AuthRepository.register(regUsername.trim(), regEmail.trim(), regPassword)
+    // One-shot: navega cuando el VM emite Authenticated.
+    LaunchedEffect(Unit) {
+        viewModel.events.collect { event ->
+            when (event) {
+                AuthEvent.Authenticated -> onAuthenticated()
             }
-            isLoading = false
-            result.fold(
-                onSuccess = { onAuthenticated() },
-                onFailure = { errorMessage = it.message ?: "Error desconocido" }
-            )
         }
     }
 
@@ -116,7 +88,6 @@ fun AuthScreen(onAuthenticated: () -> Unit) {
                 .padding(horizontal = 24.dp, vertical = 48.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // Logo
             Icon(
                 imageVector = Icons.Filled.Accessibility,
                 contentDescription = null,
@@ -136,7 +107,6 @@ fun AuthScreen(onAuthenticated: () -> Unit) {
             )
             Spacer(Modifier.height(32.dp))
 
-            // Tab selector
             Surface(
                 shape = RoundedCornerShape(16.dp),
                 color = colors.surfaceVariant,
@@ -144,14 +114,14 @@ fun AuthScreen(onAuthenticated: () -> Unit) {
             ) {
                 Row(modifier = Modifier.padding(4.dp)) {
                     AuthTab.entries.forEach { t ->
-                        val selected = t == tab
+                        val selected = t == state.tab
                         Surface(
                             shape = RoundedCornerShape(12.dp),
                             color = if (selected) colors.primary else colors.surfaceVariant,
                             modifier = Modifier.weight(1f)
                         ) {
                             TextButton(
-                                onClick = { tab = t; errorMessage = null },
+                                onClick = { viewModel.switchTab(t) },
                                 modifier = Modifier.fillMaxWidth()
                             ) {
                                 Text(
@@ -166,7 +136,6 @@ fun AuthScreen(onAuthenticated: () -> Unit) {
             }
             Spacer(Modifier.height(24.dp))
 
-            // Form card
             Surface(
                 shape = RoundedCornerShape(24.dp),
                 color = colors.surface,
@@ -175,7 +144,7 @@ fun AuthScreen(onAuthenticated: () -> Unit) {
                 modifier = Modifier.fillMaxWidth()
             ) {
                 AnimatedContent(
-                    targetState = tab,
+                    targetState = state.tab,
                     transitionSpec = { fadeIn() togetherWith fadeOut() }
                 ) { currentTab ->
                     Column(
@@ -184,31 +153,30 @@ fun AuthScreen(onAuthenticated: () -> Unit) {
                     ) {
                         if (currentTab == AuthTab.LOGIN) {
                             LoginForm(
-                                email = loginEmail,
-                                onEmailChange = { loginEmail = it },
-                                password = loginPassword,
-                                onPasswordChange = { loginPassword = it },
-                                onSubmit = ::submit
+                                email = state.loginEmail,
+                                onEmailChange = viewModel::onLoginEmailChange,
+                                password = state.loginPassword,
+                                onPasswordChange = viewModel::onLoginPasswordChange,
+                                onSubmit = viewModel::submit
                             )
                         } else {
                             RegisterForm(
-                                username = regUsername,
-                                onUsernameChange = { regUsername = it },
-                                email = regEmail,
-                                onEmailChange = { regEmail = it },
-                                password = regPassword,
-                                onPasswordChange = { regPassword = it },
-                                passwordConfirm = regPasswordConfirm,
-                                onPasswordConfirmChange = { regPasswordConfirm = it },
-                                onSubmit = ::submit
+                                username = state.regUsername,
+                                onUsernameChange = viewModel::onRegUsernameChange,
+                                email = state.regEmail,
+                                onEmailChange = viewModel::onRegEmailChange,
+                                password = state.regPassword,
+                                onPasswordChange = viewModel::onRegPasswordChange,
+                                passwordConfirm = state.regPasswordConfirm,
+                                onPasswordConfirmChange = viewModel::onRegPasswordConfirmChange,
+                                onSubmit = viewModel::submit
                             )
                         }
                     }
                 }
             }
 
-            // Error
-            errorMessage?.let { msg ->
+            state.errorMessage?.let { msg ->
                 Spacer(Modifier.height(12.dp))
                 Surface(
                     shape = RoundedCornerShape(12.dp),
@@ -226,17 +194,16 @@ fun AuthScreen(onAuthenticated: () -> Unit) {
 
             Spacer(Modifier.height(24.dp))
 
-            // Action button
             Button(
-                onClick = ::submit,
-                enabled = !isLoading,
+                onClick = viewModel::submit,
+                enabled = !state.isLoading,
                 shape = RoundedCornerShape(16.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = colors.primary),
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(52.dp)
             ) {
-                if (isLoading) {
+                if (state.isLoading) {
                     CircularProgressIndicator(
                         color = colors.surface,
                         strokeWidth = 2.dp,
@@ -244,7 +211,7 @@ fun AuthScreen(onAuthenticated: () -> Unit) {
                     )
                 } else {
                     Text(
-                        text = if (tab == AuthTab.LOGIN) "Iniciar sesion" else "Crear cuenta",
+                        text = if (state.tab == AuthTab.LOGIN) "Iniciar sesion" else "Crear cuenta",
                         style = MaterialTheme.typography.labelLarge
                     )
                 }
@@ -298,7 +265,7 @@ private fun RegisterForm(
     AuthField(
         value = username,
         onValueChange = onUsernameChange,
-        label = "Nombre de usuario",
+        label = "Nombre de usuario (opcional)",
         icon = Icons.Filled.Person,
         imeAction = ImeAction.Next,
         onImeAction = { focusManager.moveFocus(FocusDirection.Down) }
@@ -344,7 +311,7 @@ private fun AuthField(
     onImeAction: () -> Unit = {}
 ) {
     val colors = AccessPathTheme.colors
-    var passwordVisible by remember { mutableStateOf(false) }
+    var passwordVisible by remember { mutableStateOf(value = false) }
     val visualTransformation = if (isPassword && !passwordVisible)
         PasswordVisualTransformation() else VisualTransformation.None
 

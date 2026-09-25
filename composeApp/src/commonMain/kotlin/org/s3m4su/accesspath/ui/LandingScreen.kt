@@ -30,10 +30,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -43,11 +41,8 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlin.math.abs
 import kotlinx.coroutines.launch
 import org.s3m4su.accesspath.data.Place
-import org.s3m4su.accesspath.data.auth.AuthRepository
-import org.s3m4su.accesspath.data.auth.AuthState
-import org.s3m4su.accesspath.data.api.PlaceApi
 import org.s3m4su.accesspath.data.api.toDomain
-import org.s3m4su.accesspath.location.Location
+import org.s3m4su.accesspath.data.auth.AuthRepository
 import org.s3m4su.accesspath.location.createLocationService
 import org.s3m4su.accesspath.map.MapBounds
 import org.s3m4su.accesspath.map.MapViewWithMarkers
@@ -57,7 +52,6 @@ import org.s3m4su.accesspath.ui.components.MapControlButtons
 import org.s3m4su.accesspath.ui.components.PlaceBottomSheet
 import org.s3m4su.accesspath.ui.components.SearchBar
 import org.s3m4su.accesspath.ui.components.UserProfile
-import org.s3m4su.accesspath.ui.landing.PlaceFilter
 import org.s3m4su.accesspath.ui.landing.applyFilter
 import org.s3m4su.accesspath.ui.theme.AccessPathTheme
 
@@ -69,87 +63,43 @@ fun LandingScreen(
     onPlaceDetails: (Place) -> Unit = {},
     onOpenProfile: () -> Unit = {}
 ) {
-    // Acceder al tema desde el contexto (como useContext en React)
     val isDarkMode = AccessPathTheme.isDark
     val onDarkModeToggle = AccessPathTheme.toggleDarkMode
 
-    // Estado del mapa en un ViewModel: sobrevive al viaje Detail -> Landing,
-    // asi que al volver NO se repite la peticion de lugares al backend.
-    val landingViewModel: LandingViewModel = viewModel(key = "landing") { LandingViewModel() }
-    var currentLocation by landingViewModel::currentLocation
-    var places by landingViewModel::places
-    var zoom by landingViewModel::zoom
-    var mapCenter by landingViewModel::mapCenter
-    var locationDisabled by landingViewModel::locationDisabled
+    val viewModel: LandingViewModel = viewModel(key = "landing") { LandingViewModel() }
+    val state by viewModel.state.collectAsState()
 
-    var selectedMenuItem by remember { mutableStateOf(DrawerMenuItem.HOME) }
-    var filter by remember { mutableStateOf(PlaceFilter()) }
-
-    // Lista visible tras aplicar busqueda + filtros sobre el dataset cargado.
-    val visiblePlaces = remember(places, filter) { places.applyFilter(filter) }
-
-    var searchActive by remember { mutableStateOf(false) }
-    var mapBounds by remember { mutableStateOf<MapBounds?>(null) }   // region visible actual
-    var loadedBounds by landingViewModel::loadedBounds               // region ya cargada (persistida)
-    val focusManager = LocalFocusManager.current
-
-    val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
-    val scope = rememberCoroutineScope()
+    // Propaga el username autenticado al estado del VM para la cabecera del drawer.
+    val authState by AuthRepository.state.collectAsState()
+    LaunchedEffect(authState) { viewModel.onAuthStateChanged(authState) }
 
     val locationService = remember { createLocationService() }
+    val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
+    val scope = rememberCoroutineScope()
+    val focusManager = LocalFocusManager.current
 
-    val authState by AuthRepository.state.collectAsState()
-    val userProfile = remember(authState) {
-        val username = (authState as? AuthState.Authenticated)?.user?.username ?: ""
-        UserProfile(name = username)
+    // Lista visible tras aplicar busqueda + filtros sobre el dataset cargado.
+    val visiblePlaces = remember(state.places, state.filter) {
+        state.places.applyFilter(state.filter)
     }
 
-    // Reejecutable desde el boton de recargar del banner: detecta el estado de
-    // ubicacion, pide el fix si hay permiso y centra el mapa.
-    val refreshLocation: suspend () -> Unit = {
-        locationDisabled = !locationService.isLocationEnabled()
+    val userProfile = remember(state.username) { UserProfile(name = state.username) }
 
-        val hasPermission = locationService.hasLocationPermission() ||
-            onRequestPermission?.invoke() ?: false
-
-        if (hasPermission) {
-            currentLocation = locationService.getCurrentLocation()
-        }
-        // Siempre centrar el mapa: si no hay ubicacion (permiso denegado o
-        // GPS apagado / sin fix), caer a Madrid como fallback.
-        mapCenter = currentLocation ?: Location(40.4168, -3.7038)
-    }
-
-    // Trae los lugares publicados de una region (con su semaforo) y la marca como cargada.
-    val loadArea: suspend (MapBounds) -> Unit = { b ->
-        PlaceApi.mapPins(b.minLat, b.maxLat, b.minLng, b.maxLng)
-            .onSuccess { pins -> places = pins }
-        loadedBounds = b
-    }
-
+    // Bootstrap: al volver del detalle centra en selectedPlace; en arranque en
+    // frio pide ubicacion. Lo dispara el VM, no la UI.
     LaunchedEffect(Unit) {
-        when {
-            // Al volver del detalle selectedPlace ya tiene valor: centrar en el lugar.
-            selectedPlace != null ->
-                mapCenter = Location(selectedPlace.latitude, selectedPlace.longitude)
-            // Arranque inicial (sin estado previo): localizar y centrar.
-            mapCenter == null -> refreshLocation()
-            // Si no, volvemos con mapa y lugares ya cargados: no tocar nada.
-        }
+        viewModel.bootstrap(selectedPlace, locationService, onRequestPermission)
     }
 
-    // Carga inicial: en cuanto el mapa reporta su primera region visible, cargarla.
-    // Despues NO recargamos solos al panear; eso lo decide el usuario con el boton.
-    LaunchedEffect(mapBounds) {
-        val b = mapBounds
-        if (b != null && loadedBounds == null) loadArea(b)
+    // Primera carga: en cuanto el mapa reporta su primera region visible.
+    LaunchedEffect(state.mapBounds) {
+        val b = state.mapBounds
+        if (b != null && state.loadedBounds == null) viewModel.loadArea(b)
     }
 
-    // El boton "Buscar en esta zona" aparece cuando la region se ha movido
-    // lo bastante respecto a la ultima cargada.
-    val showSearchArea = remember(mapBounds, loadedBounds) {
-        val current = mapBounds
-        val loaded = loadedBounds
+    val showSearchArea = remember(state.mapBounds, state.loadedBounds) {
+        val current = state.mapBounds
+        val loaded = state.loadedBounds
         current != null && loaded != null && movedEnough(loaded, current)
     }
 
@@ -158,14 +108,14 @@ fun LandingScreen(
         drawerContent = {
             DrawerMenu(
                 userProfile = userProfile,
-                selectedItem = selectedMenuItem,
+                selectedItem = state.selectedMenuItem,
                 isDarkMode = isDarkMode,
                 onItemSelected = { item ->
                     scope.launch { drawerState.close() }
                     if (item == DrawerMenuItem.ACCESSIBILITY_PROFILE) {
                         onOpenProfile()
                     } else {
-                        selectedMenuItem = item
+                        viewModel.onMenuItemSelected(item)
                     }
                 },
                 onDarkModeToggle = onDarkModeToggle,
@@ -175,28 +125,25 @@ fun LandingScreen(
                 }
             )
         },
-        // Permitir cerrar deslizando cuando el drawer esta abierto, pero evitar
-        // que el gesto de panear el mapa lo abra cuando esta cerrado.
         gesturesEnabled = drawerState.isOpen
     ) {
         Box(modifier = Modifier.fillMaxSize()) {
-            // Map
-            mapCenter?.let { center ->
+            state.mapCenter?.let { center ->
                 MapViewWithMarkers(
                     modifier = Modifier.fillMaxSize(),
                     latitude = center.latitude,
                     longitude = center.longitude,
-                    zoom = zoom,
+                    zoom = state.zoom,
                     places = visiblePlaces,
                     onPlaceClick = { place ->
                         onSelectedPlaceChange(place)
-                        mapCenter = Location(place.latitude, place.longitude)
+                        viewModel.onPlaceClicked(place)
                     },
-                    onCameraIdle = { mapBounds = it }
+                    onCameraIdle = { viewModel.onCameraIdle(it) }
                 )
             }
 
-            if (searchActive) {
+            if (state.searchActive) {
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
@@ -207,7 +154,6 @@ fun LandingScreen(
                 )
             }
 
-            // Bloque superior: barra de busqueda + filtros + aviso de ubicacion
             Column(
                 modifier = Modifier
                     .align(Alignment.TopCenter)
@@ -215,37 +161,30 @@ fun LandingScreen(
                     .statusBarsPadding()
             ) {
                 SearchBar(
-                    query = filter.query,
-                    onQueryChange = { filter = filter.copy(query = it) },
+                    query = state.filter.query,
+                    onQueryChange = { viewModel.onQueryChange(it) },
                     onMenuClick = {
                         focusManager.clearFocus()
                         scope.launch { drawerState.open() }
                     },
-                    filter = filter,
-                    onCategoriesChange = { filter = filter.copy(categories = it) },
-                    onStatesChange = { filter = filter.copy(states = it) },
-                    onClearFilters = { filter = filter.copy(categories = emptySet(), states = emptySet()) },
-                    places = places,
-                    onActiveChange = { searchActive = it },
+                    filter = state.filter,
+                    onCategoriesChange = { viewModel.onCategoriesChange(it) },
+                    onStatesChange = { viewModel.onStatesChange(it) },
+                    onClearFilters = { viewModel.onClearFilters() },
+                    places = state.places,
+                    onActiveChange = { viewModel.onSearchActiveChange(it) },
                     onPlaceSelected = { place ->
                         onSelectedPlaceChange(place)
-                        mapCenter = Location(place.latitude, place.longitude)
-                        filter = filter.copy(query = "")
+                        viewModel.onPlaceSelectedFromSearch(place)
                     },
                     onPlaceAdded = { dto ->
-                        // Sitio recien importado de Google: aun no esta publicado
-                        // (sin valoracion), asi que no vendra del endpoint del mapa.
-                        // Lo anadimos localmente para poder seleccionarlo y valorarlo.
                         val newPlace = dto.toDomain()
-                        places = places + newPlace
+                        viewModel.onPlaceAdded(dto)
                         onSelectedPlaceChange(newPlace)
-                        mapCenter = Location(dto.latitude, dto.longitude)
-                        filter = filter.copy(query = "")
                     }
                 )
 
-                // Aviso cuando la ubicacion del dispositivo esta apagada
-                if (locationDisabled) {
+                if (state.locationDisabled) {
                     Card(
                         modifier = Modifier
                             .padding(horizontal = 16.dp, vertical = 8.dp)
@@ -273,7 +212,9 @@ fun LandingScreen(
                                 modifier = Modifier.weight(1f)
                             )
                             IconButton(
-                                onClick = { scope.launch { refreshLocation() } }
+                                onClick = {
+                                    viewModel.refreshLocation(locationService, onRequestPermission)
+                                }
                             ) {
                                 Icon(
                                     imageVector = Icons.Filled.Refresh,
@@ -286,8 +227,6 @@ fun LandingScreen(
                 }
             }
 
-            // Boton "Buscar en esta zona": recarga los lugares de la region visible
-            // solo cuando el usuario lo pide, tras haber movido el mapa.
             AnimatedVisibility(
                 visible = showSearchArea,
                 modifier = Modifier
@@ -300,7 +239,7 @@ fun LandingScreen(
                     color = AccessPathTheme.colors.primary,
                     shadowElevation = 6.dp,
                     modifier = Modifier.clickable {
-                        mapBounds?.let { b -> scope.launch { loadArea(b) } }
+                        state.mapBounds?.let { b -> viewModel.loadArea(b) }
                     }
                 ) {
                     Row(
@@ -323,29 +262,24 @@ fun LandingScreen(
                 }
             }
 
-            // Map control buttons
             MapControlButtons(
                 onMyLocationClick = {
                     focusManager.clearFocus()
-                    currentLocation?.let { location ->
-                        mapCenter = location
-                        zoom = 16f
-                    }
+                    viewModel.onMyLocationClick()
                 },
                 onZoomInClick = {
                     focusManager.clearFocus()
-                    if (zoom < 20f) zoom += 1f
+                    viewModel.onZoomIn()
                 },
                 onZoomOutClick = {
                     focusManager.clearFocus()
-                    if (zoom > 5f) zoom -= 1f
+                    viewModel.onZoomOut()
                 },
                 modifier = Modifier
                     .align(Alignment.CenterEnd)
                     .padding(end = 16.dp, bottom = 100.dp)
             )
 
-            // Bottom sheet for selected place
             selectedPlace?.let { place ->
                 Box(
                     modifier = Modifier

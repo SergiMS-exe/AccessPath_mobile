@@ -30,6 +30,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.RateReview
@@ -40,6 +41,8 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -49,14 +52,18 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.viewmodel.compose.viewModel
+import kotlinx.coroutines.launch
 import org.s3m4su.accesspath.data.Place
 import org.s3m4su.accesspath.data.accessibility.AccessibilityState
 import org.s3m4su.accesspath.data.accessibility.CriterionScore
@@ -100,6 +107,11 @@ fun PlaceDetailScreen(
         detail?.submissions.orEmpty().flatMap { sub -> sub.photos.map { it.url } }
     }
 
+    // Snackbar para confirmar "Direccion copiada" al tocar la direccion.
+    val snackbarHostState = remember { SnackbarHostState() }
+    val coroutineScope = rememberCoroutineScope()
+    val clipboard = LocalClipboardManager.current
+
     Box(modifier = modifier.fillMaxSize().background(colors.background)) {
         Column(modifier = Modifier.fillMaxSize().statusBarsPadding()) {
             // Cabecera con boton de volver
@@ -140,32 +152,32 @@ fun PlaceDetailScreen(
 
                 Spacer(modifier = Modifier.height(16.dp))
 
-                // Direccion + mini-semaforo por dimension (vistazo rapido, sin
-                // colapsar la accesibilidad a un unico estado).
-                Surface(
-                    shape = RoundedCornerShape(20.dp),
-                    color = colors.surface,
-                    tonalElevation = 2.dp,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Column(
-                        modifier = Modifier.fillMaxWidth().padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        Text(
-                            text = detail?.address ?: place.address,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = colors.textSecondary
-                        )
-                        MiniSemaforo(dimensions = dimensions, loading = state.loading)
-                        (detail?.description ?: place.description)?.let { description ->
-                            Text(
-                                text = description,
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = colors.textSecondary
-                            )
+                // 1) Direccion en su propia tarjeta. Tocarla copia al portapapeles
+                //    y muestra un Snackbar confirmando (feedback visible: sin el
+                //    snack el usuario no sabe que ha pasado nada).
+                AddressCard(
+                    address = detail?.address ?: place.address,
+                    onClick = {
+                        clipboard.setText(AnnotatedString(detail?.address ?: place.address))
+                        coroutineScope.launch {
+                            snackbarHostState.showSnackbar("Direccion copiada")
                         }
                     }
+                )
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // 2) Mini-semaforo separado visualmente de la direccion. Si tiene
+                //    mas de 4 dimensiones, se muestra colapsado con "Ver mas".
+                MiniSemaforoCard(
+                    dimensions = dimensions,
+                    loading = state.loading
+                )
+
+                // 3) Descripcion (si existe), tambien en su propia tarjeta.
+                (detail?.description ?: place.description)?.takeIf { it.isNotBlank() }?.let { description ->
+                    Spacer(modifier = Modifier.height(12.dp))
+                    DescriptionCard(description = description)
                 }
 
                 Spacer(modifier = Modifier.height(16.dp))
@@ -256,6 +268,13 @@ fun PlaceDetailScreen(
                 onClose = { lightboxIndex = null }
             )
         }
+
+        // Snackbar anclado abajo: usado por la direccion copiable para confirmar
+        // que la accion se ha realizado.
+        SnackbarHost(
+            hostState = snackbarHostState,
+            modifier = Modifier.align(Alignment.BottomCenter)
+        )
     }
 
     if (showAccessibilityDialog) {
@@ -268,34 +287,111 @@ fun PlaceDetailScreen(
 }
 
 /**
- * Fila compacta con el semaforo de cada dimension CON datos: punto de color +
- * nombre + etiqueta de texto (nunca solo color). Si ninguna tiene datos, un
- * unico "Sin datos" gris con dignidad.
+ * Tarjeta con la direccion del lugar. Tocarla copia al portapapeles (el
+ * SnackbarHost del padre muestra la confirmacion). El icono Copy aparece solo
+ * al final para reforzar la pista visual sin contaminar la lectura normal.
+ */
+@Composable
+private fun AddressCard(address: String, onClick: () -> Unit) {
+    val colors = AccessPathTheme.colors
+    Surface(
+        shape = RoundedCornerShape(16.dp),
+        color = colors.surfaceVariant,
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onClick() }
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 14.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = address,
+                style = MaterialTheme.typography.bodyMedium,
+                color = colors.textPrimary,
+                modifier = Modifier.weight(1f)
+            )
+            Icon(
+                imageVector = Icons.Filled.ContentCopy,
+                contentDescription = "Copiar direccion",
+                tint = colors.iconTint,
+                modifier = Modifier.size(18.dp)
+            )
+        }
+    }
+}
+
+/**
+ * Tarjeta del mini-semaforo por dimension. Si hay mas de 4 dimensiones con
+ * datos, se muestra colapsada con un pie "Ver mas (N)"; al expandir, todas +
+ * "Ver menos". Mantiene la misma jerarquia visual que AddressCard para que las
+ * dos tarjetas "informativas" (direccion y semaforo) vivan al mismo nivel.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun MiniSemaforo(dimensions: List<DimensionScore>, loading: Boolean) {
+private fun MiniSemaforoCard(dimensions: List<DimensionScore>, loading: Boolean) {
     val colors = AccessPathTheme.colors
     val withData = dimensions.filter { it.state != AccessibilityState.NO_DATA }
 
-    when {
-        loading && dimensions.isEmpty() -> {
-            Text(
-                text = "Cargando accesibilidad…",
-                style = MaterialTheme.typography.bodySmall,
-                color = colors.textTertiary
-            )
-        }
-        withData.isEmpty() -> {
-            MiniSemaforoItem(name = "Sin datos aún", state = AccessibilityState.NO_DATA)
-        }
-        else -> {
-            FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                withData.forEach { dimension ->
-                    MiniSemaforoItem(name = dimension.name, state = dimension.state)
+    val collapsible = withData.size > COLLAPSED_THRESHOLD
+    var expanded by remember(withData.size) { mutableStateOf(!collapsible) }
+    val visible = if (expanded) withData else withData.take(COLLAPSED_THRESHOLD)
+    val hidden = withData.size - visible.size
+
+    Surface(
+        shape = RoundedCornerShape(16.dp),
+        color = colors.surface,
+        tonalElevation = 2.dp,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            when {
+                loading && dimensions.isEmpty() -> {
+                    Text(
+                        text = "Cargando accesibilidad…",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = colors.textTertiary
+                    )
+                }
+                withData.isEmpty() -> {
+                    MiniSemaforoItem(name = "Sin datos aún", state = AccessibilityState.NO_DATA)
+                }
+                else -> {
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        visible.forEach { dimension ->
+                            MiniSemaforoItem(name = dimension.name, state = dimension.state)
+                        }
+                    }
+
+                    if (collapsible) {
+                        TextButton(
+                            onClick = { expanded = !expanded },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                text = if (expanded) "Ver menos" else "Ver mas ($hidden)",
+                                fontWeight = FontWeight.SemiBold,
+                                color = colors.primary
+                            )
+                            Icon(
+                                imageVector = if (expanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
+                                contentDescription = null,
+                                tint = colors.primary,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -328,6 +424,32 @@ private fun MiniSemaforoItem(name: String, state: AccessibilityState) {
         )
     }
 }
+
+/**
+ * Tarjeta de descripcion libre del lugar. Separada de direccion y semaforo
+ * para que la jerarquia sea: cabecera (nombre) → direccion → accesibilidad →
+ * descripcion → comentarios.
+ */
+@Composable
+private fun DescriptionCard(description: String) {
+    val colors = AccessPathTheme.colors
+    Surface(
+        shape = RoundedCornerShape(16.dp),
+        color = colors.surface,
+        tonalElevation = 1.dp,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Text(
+            text = description,
+            style = MaterialTheme.typography.bodyMedium,
+            color = colors.textSecondary,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp)
+        )
+    }
+}
+
+/** Numero de dimensiones que se muestran por defecto antes de poder plegar. */
+private const val COLLAPSED_THRESHOLD = 4
 
 /**
  * Popup con el desglose completo. Si el usuario tiene perfil, primero las
