@@ -174,7 +174,13 @@ class LandingViewModel : ViewModel() {
 
     fun onClearFilters() =
         _state.update {
-            it.copy(filter = it.filter.copy(categories = emptySet(), states = emptySet()))
+            it.copy(
+                filter = it.filter.copy(
+                    query = "",
+                    categories = emptySet(),
+                    states = emptySet()
+                )
+            )
         }
 
     fun onSearchActiveChange(active: Boolean) =
