@@ -52,7 +52,11 @@ data class DimensionScoreDto(
     val name: String,
     val state: String = "no_data",
     val conflict: Boolean = false,
-    val criteria: List<CriterionScoreDto> = emptyList()
+    val criteria: List<CriterionScoreDto> = emptyList(),
+    // Conteo de contribuciones que sustentan el estado. El backend lo calcula
+    // sumando los nDefined de los criterios; en cliente lo derivamos como
+    // fallback si el backend no lo envia.
+    @SerialName("n_contributions") val nContributions: Int = 0
 )
 
 @Serializable
@@ -84,7 +88,14 @@ fun DimensionScoreDto.toDomain() = DimensionScore(
     name = name,
     state = AccessibilityState.fromApi(state),
     conflict = conflict,
-    criteria = criteria.map { it.toDomain() }
+    criteria = criteria.map { it.toDomain() },
+    // Si el backend no nos manda el conteo, lo derivamos sumando los nDefined
+    // + nUnsure del Confidence de cada criterio. Asi no dependemos de un
+    // deploy coordinado y la pantalla siempre puede mostrar un numero
+    // consistente con el que muestra "X respuestas / X no lo sabia" en el
+    // desglose criterio a criterio.
+    nContributions = nContributions.takeIf { it > 0 }
+        ?: criteria.sumOf { it.confidence.nDefined + it.confidence.nUnsure }
 )
 
 fun PlaceAccessibilityDto.toDomain() = PlaceAccessibility(
@@ -232,7 +243,10 @@ data class PlaceDetailDto(
     val longitude: Double,
     val description: String? = null,
     val accessibility: PlaceAccessibilityDto = PlaceAccessibilityDto(),
-    val submissions: List<SubmissionDto> = emptyList()
+    val submissions: List<SubmissionDto> = emptyList(),
+    // True si el usuario autenticado ya tiene submission en este lugar. Por
+    // defecto false para tolerar backends que aun no devuelven este campo.
+    @SerialName("has_my_submission") val hasMySubmission: Boolean = false
 )
 
 @Serializable
@@ -255,7 +269,8 @@ fun PlaceDetailDto.toDomain() = PlaceDetail(
     longitude = longitude,
     description = description,
     accessibility = accessibility.toDomain(),
-    submissions = submissions.map { it.toDomain() }
+    submissions = submissions.map { it.toDomain() },
+    hasMySubmission = hasMySubmission
 )
 
 fun PlaceMapItemDto.toDomain() = org.s3m4su.accesspath.data.Place(

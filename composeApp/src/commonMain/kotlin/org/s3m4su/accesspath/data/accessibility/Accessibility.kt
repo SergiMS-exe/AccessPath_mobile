@@ -63,7 +63,11 @@ data class DimensionScore(
     val name: String,
     val state: AccessibilityState,
     val conflict: Boolean,
-    val criteria: List<CriterionScore> = emptyList()
+    val criteria: List<CriterionScore> = emptyList(),
+    // Total de contribuciones que sustentan el estado de esta dimension
+    // (suma de los nDefined de sus criterios). Sirve para dar veracidad:
+    // un "Accesible" con 1 valoracion pesa menos que uno con 12.
+    val nContributions: Int = 0
 )
 
 /** Bloque de accesibilidad del detalle de un lugar. */
@@ -131,7 +135,12 @@ data class PlaceDetail(
     val longitude: Double,
     val description: String?,
     val accessibility: PlaceAccessibility,
-    val submissions: List<PlaceSubmission>
+    val submissions: List<PlaceSubmission>,
+    // True si el usuario autenticado ya tiene submission en este lugar. Lo
+    // calcula el backend (no el cliente) para evitar race conditions: no es
+    // fiable filtrar submissions por authorName porque el backend puede
+    // ofuscar el username real (anonimato, normalizacion, etc.).
+    val hasMySubmission: Boolean = false
 )
 
 /** Una dimension del catalogo con sus criterios (GET /dimensions). */

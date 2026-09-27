@@ -55,7 +55,9 @@ object AppColors {
         // Textos
         val textPrimary = Color(0xFF1F1F1F)
         val textSecondary = Color(0xFF757575)
-        val textTertiary = Color(0xFF9E9E9E)
+        // textTertiary: WCAG AA >= 4.5:1 sobre surface/background/surfaceVariant.
+        // Antes #9E9E9E fallaba (2.46:1 sobre surfaceVariant). Subido a #6E6E6E (~5.1:1).
+        val textTertiary = Color(0xFF6E6E6E)
 
         // Acentos
         val primary = Color(0xFF6200EE)
@@ -81,7 +83,9 @@ object AppColors {
         // Textos
         val textPrimary = Color(0xFFE1E1E1)
         val textSecondary = Color(0xFFB0B0B0)
-        val textTertiary = Color(0xFF757575)
+        // textTertiary dark: antes #757575 fallaba (2.99:1 sobre surfaceVariant).
+        // Subido a #A0A0A0 (~6.8:1).
+        val textTertiary = Color(0xFFA0A0A0)
 
         // Acentos
         val primary = Color(0xFFBB86FC)
