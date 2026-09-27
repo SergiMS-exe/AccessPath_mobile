@@ -13,20 +13,20 @@ import platform.darwin.NSObject
 import kotlin.coroutines.resume
 
 @OptIn(ExperimentalForeignApi::class)
-actual class LocationService {
+actual open class LocationService {
     private val locationManager = CLLocationManager()
 
-    actual fun hasLocationPermission(): Boolean {
+    actual open fun hasLocationPermission(): Boolean {
         val status = CLLocationManager.authorizationStatus()
         return status == kCLAuthorizationStatusAuthorizedWhenInUse ||
                status == kCLAuthorizationStatusAuthorizedAlways
     }
 
-    actual fun isLocationEnabled(): Boolean {
+    actual open fun isLocationEnabled(): Boolean {
         return CLLocationManager.locationServicesEnabled()
     }
 
-    actual suspend fun requestLocationPermission(): Boolean {
+    actual open suspend fun requestLocationPermission(): Boolean {
         if (hasLocationPermission()) {
             return true
         }
@@ -48,7 +48,7 @@ actual class LocationService {
         }
     }
 
-    actual suspend fun getCurrentLocation(): Location? {
+    actual open suspend fun getCurrentLocation(): Location? {
         if (!hasLocationPermission()) {
             return null
         }

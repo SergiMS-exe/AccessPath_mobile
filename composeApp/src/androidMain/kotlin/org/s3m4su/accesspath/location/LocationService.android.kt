@@ -13,10 +13,22 @@ import com.google.android.gms.tasks.CancellationTokenSource
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlin.coroutines.resume
 
-actual class LocationService(private val context: Context) {
-    private val fusedLocationClient = LocationServices.getFusedLocationProviderClient(context)
+// El Context no se inyecta por constructor para que los tests en commonTest
+// puedan hacer `object : LocationService { ... }` (la firma del expect no tiene
+// parametros). En produccion, el Context se inyecta una sola vez via
+// `initLocationService(context)` (llamado desde MainActivity.onCreate) y la
+// factoria `createLocationService()` devuelve una instancia lista para usar.
+actual open class LocationService {
 
-    actual fun hasLocationPermission(): Boolean {
+    private val context: Context
+        get() = appContext
+            ?: error("LocationService not initialized. Call initLocationService(context) before using it.")
+
+    private val fusedLocationClient by lazy {
+        LocationServices.getFusedLocationProviderClient(context)
+    }
+
+    actual open fun hasLocationPermission(): Boolean {
         return ContextCompat.checkSelfPermission(
             context,
             Manifest.permission.ACCESS_FINE_LOCATION
@@ -27,20 +39,20 @@ actual class LocationService(private val context: Context) {
         ) == PackageManager.PERMISSION_GRANTED
     }
 
-    actual suspend fun requestLocationPermission(): Boolean {
+    actual open suspend fun requestLocationPermission(): Boolean {
         // Permission request must be handled at the UI level
         // This is just a check, actual request is done via rememberLauncherForActivityResult
         return hasLocationPermission()
     }
 
-    actual fun isLocationEnabled(): Boolean {
+    actual open fun isLocationEnabled(): Boolean {
         val lm = context.getSystemService(Context.LOCATION_SERVICE) as? LocationManager
             ?: return false
         return LocationManagerCompat.isLocationEnabled(lm)
     }
 
     @SuppressLint("MissingPermission")
-    actual suspend fun getCurrentLocation(): Location? {
+    actual open suspend fun getCurrentLocation(): Location? {
         if (!hasLocationPermission()) {
             return null
         }
@@ -74,6 +86,4 @@ fun initLocationService(context: Context) {
     appContext = context.applicationContext
 }
 
-actual fun createLocationService(): LocationService {
-    return LocationService(appContext ?: throw IllegalStateException("LocationService not initialized. Call initLocationService first."))
-}
+actual fun createLocationService(): LocationService = LocationService()
