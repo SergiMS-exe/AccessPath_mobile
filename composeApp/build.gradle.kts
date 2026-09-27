@@ -108,7 +108,31 @@ kotlin {
         }
         commonTest.dependencies {
             implementation(libs.kotlin.test)
+            implementation(libs.kotlinx.coroutines.test)
+            implementation(libs.turbine)
+            implementation(libs.ktor.client.mock)
+            implementation(libs.compose.ui.test)
         }
+    }
+
+    // Tests unitarios Android (JUnit + Compose UI test + Espresso). Las deps
+    // para androidTest (instrumentados, e2e) van via androidTestImplementation
+    // en el bloque `dependencies { }` de abajo, porque AGP no expone el source
+    // set `androidTest` al DSL de Kotlin Multiplatform.
+    sourceSets {
+        androidUnitTest.dependencies {
+            implementation(libs.kotlin.test)
+            implementation(libs.kotlin.test.junit)
+            implementation(libs.kotlinx.coroutines.test)
+            implementation(libs.compose.ui.test.junit4.android)
+            implementation(libs.androidx.testExt.junit)
+            implementation(libs.androidx.espresso.core)
+        }
+        // androidInstrumentedTest (KMP v2) depende de commonTest para ver
+        // FakeSettings, testHttpClient, Fixtures. Es el source set que la nueva
+        // layout asocia al directorio src/androidInstrumentedTest/ (antes
+        // llamado androidTest).
+        getByName("androidInstrumentedTest").dependsOn(getByName("commonTest"))
     }
 }
 
@@ -173,5 +197,13 @@ android {
 
 dependencies {
     debugImplementation(libs.compose.ui.tooling)
+
+    androidTestImplementation(libs.kotlin.test)
+    androidTestImplementation(libs.kotlin.test.junit)
+    androidTestImplementation(libs.kotlinx.coroutines.test)
+    androidTestImplementation(libs.compose.ui.test.junit4.android)
+    androidTestImplementation(libs.androidx.testExt.junit)
+    androidTestImplementation(libs.androidx.test.rules)
+    androidTestImplementation(libs.androidx.espresso.core)
 }
 
