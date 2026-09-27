@@ -392,6 +392,7 @@ private fun CommentStep(
             value = comment,
             onValueChange = onCommentChange,
             modifier = Modifier.fillMaxWidth().heightIn(min = 96.dp),
+            label = { Text("Comentario") },
             placeholder = { Text("Ej.: la rampa lateral es más cómoda que la entrada principal") },
             shape = RoundedCornerShape(16.dp)
         )

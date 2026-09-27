@@ -18,7 +18,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
@@ -35,6 +34,8 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -48,7 +49,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusDirection
-import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.input.ImeAction
@@ -315,63 +316,53 @@ private fun AuthField(
     val visualTransformation = if (isPassword && !passwordVisible)
         PasswordVisualTransformation() else VisualTransformation.None
 
-    Surface(
-        shape = RoundedCornerShape(12.dp),
-        color = colors.surfaceVariant,
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
+    OutlinedTextField(
+        value = value,
+        onValueChange = onValueChange,
+        modifier = Modifier.fillMaxWidth(),
+        singleLine = true,
+        label = { Text(label) },
+        leadingIcon = {
             Icon(
                 imageVector = icon,
                 contentDescription = null,
-                tint = colors.textSecondary,
-                modifier = Modifier.size(20.dp)
+                tint = colors.textSecondary
             )
-            BasicTextField(
-                value = value,
-                onValueChange = onValueChange,
-                modifier = Modifier
-                    .weight(1f)
-                    .padding(horizontal = 12.dp, vertical = 14.dp),
-                textStyle = MaterialTheme.typography.bodyMedium.copy(color = colors.textPrimary),
-                cursorBrush = SolidColor(colors.primary),
-                visualTransformation = visualTransformation,
-                keyboardOptions = KeyboardOptions(
-                    keyboardType = if (isPassword) KeyboardType.Password else keyboardType,
-                    imeAction = imeAction
-                ),
-                keyboardActions = KeyboardActions(
-                    onNext = { onImeAction() },
-                    onDone = { onImeAction() }
-                ),
-                singleLine = true,
-                decorationBox = { inner ->
-                    if (value.isEmpty()) {
-                        Text(
-                            text = label,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = colors.textTertiary
-                        )
-                    }
-                    inner()
-                }
-            )
-            if (isPassword) {
-                IconButton(
-                    onClick = { passwordVisible = !passwordVisible },
-                    modifier = Modifier.size(20.dp)
-                ) {
+        },
+        trailingIcon = if (isPassword) {
+            {
+                IconButton(onClick = { passwordVisible = !passwordVisible }) {
                     Icon(
                         imageVector = if (passwordVisible) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
-                        contentDescription = if (passwordVisible) "Ocultar" else "Mostrar",
-                        tint = colors.textSecondary,
-                        modifier = Modifier.size(18.dp)
+                        contentDescription = if (passwordVisible) "Ocultar contrasena" else "Mostrar contrasena",
+                        tint = colors.textSecondary
                     )
                 }
             }
-        }
-    }
+        } else null,
+        shape = RoundedCornerShape(12.dp),
+        visualTransformation = visualTransformation,
+        keyboardOptions = KeyboardOptions(
+            keyboardType = if (isPassword) KeyboardType.Password else keyboardType,
+            imeAction = imeAction
+        ),
+        keyboardActions = KeyboardActions(
+            onNext = { onImeAction() },
+            onDone = { onImeAction() }
+        ),
+        colors = OutlinedTextFieldDefaults.colors(
+            focusedContainerColor = colors.surfaceVariant,
+            unfocusedContainerColor = colors.surfaceVariant,
+            disabledContainerColor = colors.surfaceVariant,
+            focusedBorderColor = colors.primary,
+            unfocusedBorderColor = Color.Transparent,
+            cursorColor = colors.primary,
+            focusedLeadingIconColor = colors.textSecondary,
+            unfocusedLeadingIconColor = colors.textSecondary,
+            focusedTrailingIconColor = colors.textSecondary,
+            unfocusedTrailingIconColor = colors.textSecondary,
+            focusedLabelColor = colors.primary,
+            unfocusedLabelColor = colors.textSecondary
+        )
+    )
 }

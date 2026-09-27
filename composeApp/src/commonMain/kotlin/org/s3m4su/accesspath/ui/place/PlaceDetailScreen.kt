@@ -29,10 +29,13 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.RateReview
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -69,6 +72,8 @@ import org.s3m4su.accesspath.data.accessibility.AccessibilityState
 import org.s3m4su.accesspath.data.accessibility.CriterionScore
 import org.s3m4su.accesspath.data.accessibility.DimensionScore
 import org.s3m4su.accesspath.data.accessibility.PlaceSubmission
+import org.s3m4su.accesspath.data.auth.AuthRepository
+import org.s3m4su.accesspath.data.auth.AuthState
 import org.s3m4su.accesspath.ui.components.PhotoGallery
 import org.s3m4su.accesspath.ui.components.PhotoLightbox
 import org.s3m4su.accesspath.ui.components.PhotoPlaceholder
@@ -100,11 +105,28 @@ fun PlaceDetailScreen(
 
     var lightboxIndex by remember { mutableStateOf<Int?>(null) }
     var showAccessibilityDialog by remember { mutableStateOf(false) }
+    var showMySubmissionDialog by remember { mutableStateOf(false) }
 
     val detail = state.detail
     val dimensions = detail?.accessibility?.dimensions ?: place.dimensions
     val galleryPhotos = remember(detail) {
         detail?.submissions.orEmpty().flatMap { sub -> sub.photos.map { it.url } }
+    }
+
+    // Submission del usuario actual en este lugar, si existe. La fuente de
+    // verdad para el flag "tienes submission" es el backend (campo
+    // hasMySubmission en el detalle). Eso evita depender del username del
+    // cliente, que puede divergir (mayusculas, acentos, anonimato, etc.).
+    // Ademas, si el backend dice que hay submission, buscamos la nuestra por
+    // authorName para alimentar el popup (comentario + fotos + fecha).
+    val authState by AuthRepository.state.collectAsState()
+    val currentUsername = (authState as? AuthState.Authenticated)?.user?.username
+    val hasMine = detail?.hasMySubmission == true
+    val mySubmission: PlaceSubmission? = remember(detail, currentUsername, hasMine) {
+        if (!hasMine) null
+        else if (currentUsername.isNullOrBlank()) detail.submissions.firstOrNull()
+        else detail.submissions.firstOrNull { it.authorName == currentUsername }
+            ?: detail.submissions.firstOrNull()
     }
 
     // Snackbar para confirmar "Direccion copiada" al tocar la direccion.
@@ -168,10 +190,12 @@ fun PlaceDetailScreen(
                 Spacer(modifier = Modifier.height(12.dp))
 
                 // 2) Mini-semaforo separado visualmente de la direccion. Si tiene
-                //    mas de 4 dimensiones, se muestra colapsado con "Ver mas".
+                //    mas de 4 dimensiones, se muestra colapsado con "Ver mas";
+                //    el "Ver detalle" del pie abre el popup con el desglose.
                 MiniSemaforoCard(
                     dimensions = dimensions,
-                    loading = state.loading
+                    loading = state.loading,
+                    onOpenDetail = { showAccessibilityDialog = true }
                 )
 
                 // 3) Descripcion (si existe), tambien en su propia tarjeta.
@@ -191,35 +215,74 @@ fun PlaceDetailScreen(
                     )
                 }
 
-                // Acciones: desglose completo en popup + puerta de intencion.
-                OutlinedButton(
-                    onClick = { showAccessibilityDialog = true },
-                    enabled = !state.loading && dimensions.isNotEmpty(),
-                    modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp),
-                    shape = RoundedCornerShape(16.dp),
-                    colors = ButtonDefaults.outlinedButtonColors(contentColor = colors.primary)
-                ) {
-                    Text(text = "Ver accesibilidad en detalle", fontWeight = FontWeight.SemiBold)
-                }
-
-                Spacer(modifier = Modifier.height(10.dp))
-
-                Button(
-                    onClick = { onContribute(place) },
-                    modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp),
-                    shape = RoundedCornerShape(16.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = colors.primary)
-                ) {
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                // Acciones: si el usuario ya tiene submission propia en este lugar,
+                // se parte en dos botones (continuar valorando + ver/editar mis
+                // contribuciones). Si no, una sola puerta "Quiero valorar".
+                if (mySubmission != null) {
+                    MyRatingBadge(
+                        submission = mySubmission,
+                        onOpen = { showMySubmissionDialog = true }
+                    )
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Button(
+                        onClick = { onContribute(place) },
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp),
+                        shape = RoundedCornerShape(16.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = colors.primary)
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.RateReview,
-                            contentDescription = null,
-                            modifier = Modifier.size(20.dp)
-                        )
-                        Text(text = "Quiero valorar", fontWeight = FontWeight.SemiBold)
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.RateReview,
+                                contentDescription = null,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Text(text = "Continuar valorando", fontWeight = FontWeight.SemiBold)
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(10.dp))
+                    OutlinedButton(
+                        onClick = { showMySubmissionDialog = true },
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp),
+                        shape = RoundedCornerShape(16.dp),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = colors.primary)
+                    ) {
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Edit,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Text(
+                                text = "Mis contribuciones",
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
+                    }
+                } else {
+                    Button(
+                        onClick = { onContribute(place) },
+                        enabled = !state.loading,
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp),
+                        shape = RoundedCornerShape(16.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = colors.primary)
+                    ) {
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.RateReview,
+                                contentDescription = null,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Text(text = "Quiero valorar", fontWeight = FontWeight.SemiBold)
+                        }
                     }
                 }
 
@@ -284,6 +347,17 @@ fun PlaceDetailScreen(
             onDismiss = { showAccessibilityDialog = false }
         )
     }
+
+    if (showMySubmissionDialog && mySubmission != null) {
+        MySubmissionDialog(
+            submission = mySubmission,
+            onDismiss = { showMySubmissionDialog = false },
+            onContinueRating = {
+                showMySubmissionDialog = false
+                onContribute(place)
+            }
+        )
+    }
 }
 
 /**
@@ -327,12 +401,19 @@ private fun AddressCard(address: String, onClick: () -> Unit) {
 /**
  * Tarjeta del mini-semaforo por dimension. Si hay mas de 4 dimensiones con
  * datos, se muestra colapsada con un pie "Ver mas (N)"; al expandir, todas +
- * "Ver menos". Mantiene la misma jerarquia visual que AddressCard para que las
- * dos tarjetas "informativas" (direccion y semaforo) vivan al mismo nivel.
+ * "Ver menos". Al pie, fuera del bloque colapsable, un enlace "Ver detalle"
+ * abre el popup con el desglose completo (reemplaza al antiguo boton inferior
+ * de la pantalla). Mantiene la misma jerarquia visual que AddressCard para
+ * que las dos tarjetas "informativas" (direccion y semaforo) vivan al mismo
+ * nivel.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun MiniSemaforoCard(dimensions: List<DimensionScore>, loading: Boolean) {
+private fun MiniSemaforoCard(
+    dimensions: List<DimensionScore>,
+    loading: Boolean,
+    onOpenDetail: () -> Unit
+) {
     val colors = AccessPathTheme.colors
     val withData = dimensions.filter { it.state != AccessibilityState.NO_DATA }
 
@@ -340,6 +421,7 @@ private fun MiniSemaforoCard(dimensions: List<DimensionScore>, loading: Boolean)
     var expanded by remember(withData.size) { mutableStateOf(!collapsible) }
     val visible = if (expanded) withData else withData.take(COLLAPSED_THRESHOLD)
     val hidden = withData.size - visible.size
+    val canOpenDetail = !loading && dimensions.isNotEmpty()
 
     Surface(
         shape = RoundedCornerShape(16.dp),
@@ -370,7 +452,11 @@ private fun MiniSemaforoCard(dimensions: List<DimensionScore>, loading: Boolean)
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         visible.forEach { dimension ->
-                            MiniSemaforoItem(name = dimension.name, state = dimension.state)
+                            MiniSemaforoItem(
+                                name = dimension.name,
+                                state = dimension.state,
+                                nContributions = dimension.nContributions
+                            )
                         }
                     }
 
@@ -394,12 +480,37 @@ private fun MiniSemaforoCard(dimensions: List<DimensionScore>, loading: Boolean)
                     }
                 }
             }
+
+            // Pie de la tarjeta: abre el popup con el desglose completo.
+            // Va siempre, aunque el bloque "Ver mas/menos" este colapsado, para
+            // que la pista de "hay mas detalle debajo" no quede oculta.
+            TextButton(
+                onClick = onOpenDetail,
+                enabled = canOpenDetail,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(
+                    text = "Ver detalle",
+                    fontWeight = FontWeight.SemiBold,
+                    color = if (canOpenDetail) colors.primary else colors.textTertiary
+                )
+                Icon(
+                    imageVector = Icons.Filled.ExpandMore,
+                    contentDescription = null,
+                    tint = if (canOpenDetail) colors.primary else colors.textTertiary,
+                    modifier = Modifier.size(18.dp)
+                )
+            }
         }
     }
 }
 
 @Composable
-private fun MiniSemaforoItem(name: String, state: AccessibilityState) {
+private fun MiniSemaforoItem(
+    name: String,
+    state: AccessibilityState,
+    nContributions: Int = 0
+) {
     val colors = AccessPathTheme.colors
     Row(
         horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -422,6 +533,15 @@ private fun MiniSemaforoItem(name: String, state: AccessibilityState) {
             style = MaterialTheme.typography.labelMedium,
             color = state.getColor()
         )
+        // Conteo de valoraciones que sustentan el estado. Refuerza la veracidad
+        // visual: un "Accesible" con 12 valoraciones pesa mas que uno con 1.
+        if (nContributions > 0) {
+            Text(
+                text = "· $nContributions ${if (nContributions == 1) "valoracion" else "valoraciones"}",
+                style = MaterialTheme.typography.labelMedium,
+                color = colors.textTertiary
+            )
+        }
     }
 }
 
@@ -605,6 +725,14 @@ private fun DimensionSemaforoCard(dimension: DimensionScore) {
                             fontWeight = FontWeight.SemiBold,
                             color = dimension.state.getColor()
                         )
+                        if (dimension.nContributions > 0) {
+                            Text(
+                                text = "· ${dimension.nContributions} " +
+                                    if (dimension.nContributions == 1) "valoracion" else "valoraciones",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = colors.textTertiary
+                            )
+                        }
                         if (dimension.conflict) {
                             Text(
                                 text = "Opiniones divididas",
@@ -818,6 +946,219 @@ private fun EmptySubmissions() {
                 style = MaterialTheme.typography.bodyMedium,
                 color = colors.textTertiary
             )
+        }
+    }
+}
+
+/**
+ * Indicador compacto de "ya has valorado este sitio". Chip + texto resumen
+ * (fecha y, si hay, conteo de fotos). Tocable: abre el popup con el detalle
+ * de la submission propia. Reemplaza visualmente al antiguo boton "Ver
+ * accesibilidad en detalle" como senal de que existe una valoracion previa.
+ */
+@Composable
+private fun MyRatingBadge(
+    submission: PlaceSubmission,
+    onOpen: () -> Unit
+) {
+    val colors = AccessPathTheme.colors
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onOpen() },
+        shape = RoundedCornerShape(16.dp),
+        color = colors.surface,
+        tonalElevation = 1.dp
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 14.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = Icons.Default.Check,
+                contentDescription = null,
+                tint = colors.success,
+                modifier = Modifier.size(20.dp)
+            )
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(
+                    text = "Tu valoración",
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    color = colors.textPrimary
+                )
+                val parts = buildList {
+                    submission.createdAt?.let { add("publicada el ${it.take(10)}") }
+                    if (submission.photos.isNotEmpty()) {
+                        add(
+                            "${submission.photos.size} foto" +
+                                if (submission.photos.size == 1) "" else "s"
+                        )
+                    }
+                    submission.comment?.takeIf { it.isNotBlank() }?.let { add("con comentario") }
+                }
+                if (parts.isNotEmpty()) {
+                    Text(
+                        text = parts.joinToString(" · "),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = colors.textTertiary
+                    )
+                }
+            }
+            Text(
+                text = "Ver detalle",
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.SemiBold,
+                color = colors.primary
+            )
+        }
+    }
+}
+
+/**
+ * Popup con la submission propia del usuario en este lugar. Muestra fecha,
+ * comentario (si hay) y conteo de fotos como referencia. La unica accion de
+ * escritura es "Continuar valorando" (cierra el popup y navega al bucle de
+ * contribucion, que ya soporta deshacer/responder/editar comentario).
+ * La edicion concreta de criterios ya respondidos queda en manos del bucle
+ * ContributeScreen (que llama a GET /next-question y al deshacer via DELETE),
+ * asi no duplicamos flujo aqui.
+ */
+@Composable
+private fun MySubmissionDialog(
+    submission: PlaceSubmission,
+    onDismiss: () -> Unit,
+    onContinueRating: () -> Unit
+) {
+    val colors = AccessPathTheme.colors
+
+    Dialog(onDismissRequest = onDismiss) {
+        Surface(
+            shape = RoundedCornerShape(24.dp),
+            color = colors.background,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 560.dp)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = 20.dp, end = 8.dp, top = 12.dp, bottom = 4.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Tus contribuciones",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = colors.textPrimary
+                    )
+                    IconButton(onClick = onDismiss) {
+                        Icon(
+                            imageVector = Icons.Default.Close,
+                            contentDescription = "Cerrar",
+                            tint = colors.iconTint
+                        )
+                    }
+                }
+
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .verticalScroll(rememberScrollState())
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    // Resumen: cuando se publico, que contiene.
+                    Surface(
+                        shape = RoundedCornerShape(16.dp),
+                        color = colors.surface,
+                        tonalElevation = 1.dp,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            submission.createdAt?.let { date ->
+                                Text(
+                                    text = "Publicada el ${date.take(10)}",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = colors.textTertiary
+                                )
+                            }
+                            if (submission.photos.isNotEmpty()) {
+                                Row(
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Filled.PhotoCamera,
+                                        contentDescription = null,
+                                        tint = colors.iconTint,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Text(
+                                        text = submission.photos.size.let {
+                                            "$it foto${if (it == 1) "" else "s"}"
+                                        },
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = colors.textSecondary
+                                    )
+                                }
+                            }
+                            submission.comment?.takeIf { it.isNotBlank() }?.let { comment ->
+                                Text(
+                                    text = comment,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = colors.textPrimary
+                                )
+                            } ?: Text(
+                                text = "Sin comentario escrito.",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = colors.textTertiary
+                            )
+                        }
+                    }
+
+                    Text(
+                        text = "Para editar o anadir mas respuestas a este sitio, " +
+                            "continua valorando: podras cambiar tu comentario y " +
+                            "deshacer o ampliar tus respuestas a los criterios.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = colors.textTertiary
+                    )
+
+                    Spacer(modifier = Modifier.height(4.dp))
+
+                    Button(
+                        onClick = onContinueRating,
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp),
+                        shape = RoundedCornerShape(16.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = colors.primary)
+                    ) {
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.RateReview,
+                                contentDescription = null,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Text(text = "Continuar valorando", fontWeight = FontWeight.SemiBold)
+                        }
+                    }
+                }
+            }
         }
     }
 }

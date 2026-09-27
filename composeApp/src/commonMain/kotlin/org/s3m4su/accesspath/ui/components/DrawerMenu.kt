@@ -16,6 +16,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import org.s3m4su.accesspath.ui.theme.AccessPathTheme
@@ -276,6 +278,9 @@ private fun DrawerMenuItemRow(
         color = if (isSelected) selectedBgColor else itemBgColor,
         modifier = modifier
             .fillMaxWidth()
+            .semantics(mergeDescendants = true) {
+                stateDescription = if (isSelected) "Seleccionado" else "No seleccionado"
+            }
             .clickable(onClick = onClick)
     ) {
         Row(

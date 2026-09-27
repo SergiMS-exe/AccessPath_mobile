@@ -23,7 +23,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Accessible
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -46,9 +45,12 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
@@ -171,38 +173,39 @@ fun SearchBar(
 
                 Spacer(modifier = Modifier.width(16.dp))
 
-                Box(modifier = Modifier.weight(1f)) {
-                    BasicTextField(
-                        value = query,
-                        onValueChange = onQueryChange,
-                        singleLine = true,
-                        textStyle = MaterialTheme.typography.titleMedium.copy(color = colors.textPrimary),
-                        cursorBrush = SolidColor(colors.primary),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .onFocusChanged { state ->
-                                if (state.isFocused) {
-                                    isActive = true
-                                    onActiveChange(true)
-                                } else {
-                                    scope.launch {
-                                        delay(100)
-                                        isActive = false
-                                        onActiveChange(false)
-                                        googleMode = false
-                                        googleSuggestions = emptyList()
-                                    }
+                OutlinedTextField(
+                    value = query,
+                    onValueChange = onQueryChange,
+                    singleLine = true,
+                    label = { Text("Buscar lugares accesibles") },
+                    textStyle = MaterialTheme.typography.titleMedium.copy(color = colors.textPrimary),
+                    modifier = Modifier
+                        .weight(1f)
+                        .onFocusChanged { state ->
+                            if (state.isFocused) {
+                                isActive = true
+                                onActiveChange(true)
+                            } else {
+                                scope.launch {
+                                    delay(100)
+                                    isActive = false
+                                    onActiveChange(false)
+                                    googleMode = false
+                                    googleSuggestions = emptyList()
                                 }
                             }
+                        },
+                    shape = RoundedCornerShape(24.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedContainerColor = Color.Transparent,
+                        unfocusedContainerColor = Color.Transparent,
+                        focusedBorderColor = Color.Transparent,
+                        unfocusedBorderColor = Color.Transparent,
+                        cursorColor = colors.primary,
+                        focusedLabelColor = colors.primary,
+                        unfocusedLabelColor = colors.textTertiary
                     )
-                    if (query.isEmpty()) {
-                        Text(
-                            text = "Buscar lugares accesibles",
-                            style = MaterialTheme.typography.titleMedium,
-                            color = colors.textTertiary
-                        )
-                    }
-                }
+                )
 
                 if (query.isNotEmpty()) {
                     IconButton(onClick = {
@@ -485,6 +488,9 @@ fun SearchBar(
                                         onCategoriesChange(next)
                                     },
                                     label = { Text(category.getDisplayName()) },
+                                    modifier = Modifier.semantics(mergeDescendants = true) {
+                                        stateDescription = if (selected) "Seleccionado" else "No seleccionado"
+                                    },
                                     colors = FilterChipDefaults.filterChipColors(
                                         selectedContainerColor = colors.primary,
                                         selectedLabelColor = Color.White
@@ -532,6 +538,9 @@ fun SearchBar(
                                         onStatesChange(next)
                                     },
                                     label = { Text(state.label) },
+                                    modifier = Modifier.semantics(mergeDescendants = true) {
+                                        stateDescription = if (selected) "Seleccionado" else "No seleccionado"
+                                    },
                                     colors = FilterChipDefaults.filterChipColors(
                                         selectedContainerColor = state.getColor(),
                                         selectedLabelColor = Color.White
@@ -821,6 +830,13 @@ fun MapControlButtons(
             )
         }
 
+        // Grupo +/- con la misma silueta cuadrada y el mismo radio que el FAB
+        // de arriba (56dp, RoundedCornerShape 28dp = circular). Antes los
+        // IconButton tenian 48dp y el Surface esquinas de 28dp con botones
+        // internos, lo que dejaba el conjunto visiblemente mas pequeno y
+        // desalineado con el FAB de centrar. Se anade role=Button y
+        // contentDescription en el Box para que TalkBack siga anunciando el
+        // boton (perdemos la semantica que daba IconButton al cambiar a Box).
         Surface(
             shape = RoundedCornerShape(28.dp),
             color = colors.surface,
@@ -828,7 +844,13 @@ fun MapControlButtons(
             shadowElevation = 4.dp
         ) {
             Column {
-                IconButton(onClick = onZoomInClick) {
+                Box(
+                    modifier = Modifier
+                        .size(56.dp)
+                        .clickable(onClick = onZoomInClick)
+                        .semantics { role = Role.Button },
+                    contentAlignment = Alignment.Center
+                ) {
                     Icon(
                         imageVector = Icons.Default.Add,
                         contentDescription = "Zoom in",
@@ -837,11 +859,17 @@ fun MapControlButtons(
                 }
                 HorizontalDivider(
                     modifier = Modifier
-                        .width(48.dp)
-                        .padding(horizontal = 12.dp),
+                        .width(40.dp)
+                        .align(Alignment.CenterHorizontally),
                     color = colors.divider
                 )
-                IconButton(onClick = onZoomOutClick) {
+                Box(
+                    modifier = Modifier
+                        .size(56.dp)
+                        .clickable(onClick = onZoomOutClick)
+                        .semantics { role = Role.Button },
+                    contentAlignment = Alignment.Center
+                ) {
                     Icon(
                         imageVector = Icons.Default.Remove,
                         contentDescription = "Zoom out",

@@ -127,7 +127,7 @@ fun PhotoGallery(
             // Pildora con el total de fotos
             Surface(
                 shape = RoundedCornerShape(20.dp),
-                color = Color.Black.copy(alpha = 0.55f),
+                color = Color.Black.copy(alpha = 0.7f),
                 modifier = Modifier
                     .align(Alignment.BottomEnd)
                     .padding(12.dp)
@@ -191,7 +191,7 @@ fun PhotoLightbox(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.94f))
+            .background(Color.Black.copy(alpha = 0.88f))
     ) {
         HorizontalPager(
             state = pagerState,
@@ -229,7 +229,7 @@ fun PhotoLightbox(
             }
             Surface(
                 shape = RoundedCornerShape(20.dp),
-                color = Color.Black.copy(alpha = 0.5f)
+                color = Color.Black.copy(alpha = 0.7f)
             ) {
                 Text(
                     text = "${pagerState.currentPage + 1} / ${photos.size}",
