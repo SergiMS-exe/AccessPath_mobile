@@ -13,7 +13,9 @@ object TestResets {
         PlaceApi.searchOverride = null
         PlaceApi.mapPinsOverride = null
         PlaceApi.detailOverride = null
-        PlaceApi.importFromGoogleOverride = null
+        PlaceApi.importFromCatalogOverride = null
+        PlaceApi.resolveLinkOverride = null
+        PlaceApi.createCommunityOverride = null
         ContributionApi.nextQuestionOverride = null
         ContributionApi.saveOverride = null
         ContributionApi.deleteOverride = null

@@ -120,33 +120,103 @@ class PlaceApiTest {
     }
 
     @Test
-    fun `importFromGoogle posts body with snake_case fields`() = runTest {
+    fun `importFromCatalog posts source and external id`() = runTest {
+        var capturedPath: String? = null
+        var capturedBody: String? = null
+        val client = testHttpClient({ request ->
+            capturedPath = request.url.encodedPath
+            capturedBody = request.body.toByteArray().decodeToString()
+            respond(
+                """{"data":{"id":5,"code":"X","name":"N","latitude":0,"longitude":0,"created_by":1,"created_at":"x","updated_at":"x","source":"overture","moderation_status":"verified"},"error":null}""",
+                HttpStatusCode.OK,
+                headersOf(HttpHeaders.ContentType, "application/json")
+            )
+        })
+        val r = PlaceApi.importFromCatalog("overture", "gers-1", null, client)
+        assertTrue(r.isSuccess)
+        assertEquals("/api/v1/places/from-catalog", capturedPath)
+        assertEquals(true, capturedBody!!.contains("\"source\":\"overture\""))
+        assertEquals(true, capturedBody!!.contains("\"external_id\":\"gers-1\""))
+    }
+
+    @Test
+    fun `importFromCatalog accepts a local place id`() = runTest {
         var capturedBody: String? = null
         val client = testHttpClient({ request ->
             capturedBody = request.body.toByteArray().decodeToString()
             respond(
-                """{"data":{"id":99,"code":"X","name":"N","latitude":0,"longitude":0,"created_by":1,"created_at":"x","updated_at":"x"},"error":null}""",
+                """{"data":{"id":12,"code":"X","name":"Local","latitude":0,"longitude":0,"created_by":1,"created_at":"x","updated_at":"x"},"error":null}""",
                 HttpStatusCode.OK,
                 headersOf(HttpHeaders.ContentType, "application/json")
             )
         })
-        val r = PlaceApi.importFromGoogle("place-id-1", "session-1", client)
+        val r = PlaceApi.importFromCatalog(placeId = 12, client = client)
         assertTrue(r.isSuccess)
-        assertEquals(true, capturedBody!!.contains("\"google_place_id\":\"place-id-1\""))
-        assertEquals(true, capturedBody!!.contains("\"session_token\":\"session-1\""))
+        assertEquals(true, capturedBody!!.contains("\"place_id\":12"))
     }
 
     @Test
-    fun `importFromGoogle propagates backend error message`() = runTest {
-        val client = testHttpClient({
+    fun `resolveLink parses matched catalog response`() = runTest {
+        var capturedPath: String? = null
+        var capturedBody: String? = null
+        val client = testHttpClient({ request ->
+            capturedPath = request.url.encodedPath
+            capturedBody = request.body.toByteArray().decodeToString()
             respond(
-                """{"data":null,"error":"Sitio cerrado permanentemente"}""",
+                """{"data":{"matched":true,"catalog":{"source":"overture","external_id":"gers-1","name":"Cafeteria Eclipse","address":"Calle Leopoldo Lugones, 24","latitude":43.4021,"longitude":-5.804946}},"error":null}""",
                 HttpStatusCode.OK,
                 headersOf(HttpHeaders.ContentType, "application/json")
             )
         })
-        val r = PlaceApi.importFromGoogle("place-id", "session", client)
-        assertTrue(r.isFailure)
-        assertEquals(true, r.exceptionOrNull()!!.message!!.contains("Sitio cerrado"))
+        val r = PlaceApi.resolveLink("https://maps.app.goo.gl/abc", client)
+        assertEquals("/api/v1/places/resolve-link", capturedPath)
+        assertEquals(true, capturedBody!!.contains("\"url\":\"https://maps.app.goo.gl/abc\""))
+        val resolved = r.getOrNull()!!
+        assertTrue(resolved.matched)
+        assertEquals("gers-1", resolved.catalog!!.externalId)
+        assertEquals("Cafeteria Eclipse", resolved.catalog!!.name)
+    }
+
+    @Test
+    fun `resolveLink returns prefill when there is no match`() = runTest {
+        val client = testHttpClient({
+            respond(
+                """{"data":{"matched":false,"prefill":{"name":"Bar Nuevo","latitude":43.4,"longitude":-5.8,"google_ftid":"0xaa:0xbb"}},"error":null}""",
+                HttpStatusCode.OK,
+                headersOf(HttpHeaders.ContentType, "application/json")
+            )
+        })
+        val r = PlaceApi.resolveLink("https://maps.app.goo.gl/abc", client)
+        val resolved = r.getOrNull()!!
+        assertTrue(!resolved.matched)
+        assertEquals("Bar Nuevo", resolved.prefill!!.name)
+        assertEquals("0xaa:0xbb", resolved.prefill!!.googleFtid)
+    }
+
+    @Test
+    fun `createCommunity posts the site and returns pending place`() = runTest {
+        var capturedPath: String? = null
+        var capturedBody: String? = null
+        val client = testHttpClient({ request ->
+            capturedPath = request.url.encodedPath
+            capturedBody = request.body.toByteArray().decodeToString()
+            respond(
+                """{"data":{"id":7,"code":"X","name":"Bar Nuevo","address":"Calle X, 1","latitude":43.4,"longitude":-5.8,"created_by":1,"created_at":"x","updated_at":"x","source":"community","moderation_status":"pending"},"error":null}""",
+                HttpStatusCode.Created,
+                headersOf(HttpHeaders.ContentType, "application/json")
+            )
+        })
+        val r = PlaceApi.createCommunity(
+            name = "Bar Nuevo",
+            address = "Calle X, 1",
+            latitude = 43.4,
+            longitude = -5.8,
+            googleFtid = "0xaa:0xbb",
+            client = client
+        )
+        assertTrue(r.isSuccess)
+        assertEquals("/api/v1/places/community", capturedPath)
+        assertEquals(true, capturedBody!!.contains("\"name\":\"Bar Nuevo\""))
+        assertEquals(true, capturedBody!!.contains("\"google_ftid\":\"0xaa:0xbb\""))
     }
 }

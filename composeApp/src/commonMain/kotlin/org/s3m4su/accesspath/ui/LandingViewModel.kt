@@ -148,7 +148,7 @@ class LandingViewModel : ViewModel() {
     }
 
     /**
-     * Sitio recien importado de Google: aun no esta publicado (sin valoracion),
+     * Sitio recien importado del catalogo: aun no esta publicado (sin valoracion),
      * asi que no vendra del endpoint del mapa. Lo anadimos localmente para poder
      * seleccionarlo y valorarlo.
      */

@@ -257,7 +257,7 @@ class LandingViewModelTest {
             org.s3m4su.accesspath.data.api.PlaceDto(
                 id = 99, code = "X", name = "Nuevo", address = "Calle 1",
                 latitude = 41.0, longitude = 2.0, description = null,
-                googlePlaceId = null, createdBy = 1,
+                createdBy = 1,
                 createdAt = "2026-01-01", updatedAt = "2026-01-01"
             )
         }

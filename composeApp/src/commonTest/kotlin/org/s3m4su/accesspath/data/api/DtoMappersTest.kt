@@ -90,7 +90,7 @@ class DtoMappersTest {
         val dto = PlaceDto(
             id = 42, code = "X", name = "Sitio", address = null,
             latitude = 0.0, longitude = 0.0, description = null,
-            googlePlaceId = null, createdBy = 1,
+            createdBy = 1,
             createdAt = "2026-01-01", updatedAt = "2026-01-01"
         )
         val d = dto.toDomain()

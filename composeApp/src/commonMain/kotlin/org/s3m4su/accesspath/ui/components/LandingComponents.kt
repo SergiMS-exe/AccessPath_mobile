@@ -90,11 +90,11 @@ fun SearchBar(
 
     var showFilters by remember { mutableStateOf(false) }
     var isActive by remember { mutableStateOf(false) }
-    var googleMode by remember { mutableStateOf(false) }
-    var googleSuggestions by remember { mutableStateOf<List<AutocompleteItemDto>>(emptyList()) }
-    var isGoogleSearching by remember { mutableStateOf(false) }
+    var catalogMode by remember { mutableStateOf(false) }
+    var catalogSuggestions by remember { mutableStateOf<List<AutocompleteItemDto>>(emptyList()) }
+    var isCatalogSearching by remember { mutableStateOf(false) }
     var isImporting by remember { mutableStateOf(false) }
-    var googleError by remember { mutableStateOf<String?>(null) }
+    var catalogError by remember { mutableStateOf<String?>(null) }
     var sessionToken by remember { mutableStateOf(Uuid.random().toString()) }
 
     val showDropdown = isActive && query.isNotEmpty()
@@ -107,26 +107,26 @@ fun SearchBar(
         }.take(5)
     }
 
-    LaunchedEffect(query, googleMode) {
-        if (!googleMode || query.length < 3) {
-            googleSuggestions = emptyList()
+    LaunchedEffect(query, catalogMode) {
+        if (!catalogMode || query.length < 3) {
+            catalogSuggestions = emptyList()
             return@LaunchedEffect
         }
         delay(300)
-        isGoogleSearching = true
-        googleError = null
+        isCatalogSearching = true
+        catalogError = null
         PlaceApi.search(query, sessionToken)
-            .onSuccess { googleSuggestions = it }
-            .onFailure { googleError = "Error al buscar. Intenta de nuevo." }
-        isGoogleSearching = false
+            .onSuccess { catalogSuggestions = it }
+            .onFailure { catalogError = "Error al buscar. Intenta de nuevo." }
+        isCatalogSearching = false
     }
 
     fun dismiss() {
         focusManager.clearFocus()
         isActive = false
-        googleMode = false
-        googleSuggestions = emptyList()
-        googleError = null
+        catalogMode = false
+        catalogSuggestions = emptyList()
+        catalogError = null
     }
 
     val shape = if (showDropdown) RoundedCornerShape(16.dp) else RoundedCornerShape(28.dp)
@@ -148,11 +148,11 @@ fun SearchBar(
                     .padding(start = 20.dp, end = 12.dp, top = 8.dp, bottom = 8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                if (googleMode) {
+                if (catalogMode) {
                     IconButton(onClick = {
-                        googleMode = false
-                        googleSuggestions = emptyList()
-                        googleError = null
+                        catalogMode = false
+                        catalogSuggestions = emptyList()
+                        catalogError = null
                     }) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
@@ -190,8 +190,8 @@ fun SearchBar(
                                     delay(100)
                                     isActive = false
                                     onActiveChange(false)
-                                    googleMode = false
-                                    googleSuggestions = emptyList()
+                                    catalogMode = false
+                                    catalogSuggestions = emptyList()
                                 }
                             }
                         },
@@ -216,7 +216,7 @@ fun SearchBar(
                     }
                 }
 
-                if (!googleMode) {
+                if (!catalogMode) {
                     IconButton(onClick = { showFilters = !showFilters }) {
                         Icon(
                             imageVector = Icons.Default.FilterAlt,
@@ -236,7 +236,7 @@ fun SearchBar(
                 Column(modifier = Modifier.fillMaxWidth()) {
                     HorizontalDivider(color = colors.divider)
 
-                    if (googleMode) {
+                    if (catalogMode) {
                         when {
                             isImporting -> {
                                 Row(
@@ -258,7 +258,7 @@ fun SearchBar(
                                     )
                                 }
                             }
-                            isGoogleSearching -> {
+                            isCatalogSearching -> {
                                 Box(
                                     modifier = Modifier.fillMaxWidth().padding(vertical = 14.dp),
                                     contentAlignment = Alignment.Center
@@ -270,34 +270,33 @@ fun SearchBar(
                                     )
                                 }
                             }
-                            googleError != null -> {
+                            catalogError != null -> {
                                 Text(
-                                    text = googleError!!,
+                                    text = catalogError!!,
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = MaterialTheme.colorScheme.error,
                                     modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp)
                                 )
                             }
-                            googleSuggestions.isNotEmpty() -> {
+                            catalogSuggestions.isNotEmpty() -> {
                                 LazyColumn(modifier = Modifier.heightIn(max = 280.dp)) {
-                                    items(googleSuggestions) { item ->
+                                    items(catalogSuggestions) { item ->
                                         GoogleSuggestionRow(
                                             item = item,
                                             enabled = !isImporting,
                                             onClick = {
                                                 scope.launch {
                                                     isImporting = true
-                                                    googleError = null
-                                                    PlaceApi.importFromGoogle(item.placeId, sessionToken)
+                                                    catalogError = null
+                                                    PlaceApi.importFromCatalog(item.source, item.externalId, item.localPlaceId)
                                                         .onSuccess { dto ->
-                                                            sessionToken = Uuid.random().toString()
                                                             onPlaceAdded(dto)
                                                             dismiss()
                                                         }
                                                         .onFailure {
-                                                            googleError = when {
+                                                            catalogError = when {
                                                                 it.message?.contains("429") == true ->
-                                                                    "Limite mensual de busquedas alcanzado"
+                                                                    "Demasiadas peticiones. Espera un momento."
                                                                 // Mensaje del backend (p.ej. sitio cerrado permanentemente).
                                                                 !it.message.isNullOrBlank() && it is IllegalStateException ->
                                                                     it.message
@@ -317,7 +316,7 @@ fun SearchBar(
                             }
                             query.length >= 3 -> {
                                 Text(
-                                    text = "No se encontraron resultados en Google Maps",
+                                    text = "No se encontraron resultados",
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = colors.textTertiary,
                                     modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp)
@@ -341,14 +340,14 @@ fun SearchBar(
                             }
                         }
 
-                        // Fila de Google Maps al fondo
+                        // Fila para buscar en el catalogo
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clickable(
                                     interactionSource = remember { MutableInteractionSource() },
                                     indication = ripple()
-                                ) { googleMode = true }
+                                ) { catalogMode = true }
                                 .padding(horizontal = 20.dp, vertical = 13.dp),
                             horizontalArrangement = Arrangement.spacedBy(12.dp),
                             verticalAlignment = Alignment.CenterVertically
@@ -360,7 +359,7 @@ fun SearchBar(
                                 modifier = Modifier.size(18.dp)
                             )
                             Text(
-                                text = "Buscar \"$query\" en Google Maps",
+                                text = "Buscar \"$query\" en el catalogo",
                                 style = MaterialTheme.typography.bodyMedium,
                                 fontWeight = FontWeight.Medium,
                                 color = colors.primary,
